@@ -1,0 +1,17 @@
+some-service-dev0:
+  source:
+    repoURL: https://github.com/apollographql/some-repo.git
+    path: services/hello-world
+    trackMutableRef: pr-1234
+
+some-service-staging:
+  source:
+    repoURL: https://github.com/apollographql/some-repo.git
+    path: services/hello-world
+    trackMutableRef: main
+
+some-service-prod:
+  source:
+    repoURL: https://github.com/apollographql/some-repo.git
+    path: services/hello-world
+    ref: abcdef1234

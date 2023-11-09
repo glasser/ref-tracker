@@ -1,5 +1,8 @@
 import * as core from '@actions/core';
-import { wait } from './wait';
+import * as glob from '@actions/glob';
+import * as yaml from 'yaml';
+import { readFile } from 'fs/promises';
+import { isString } from 'util';
 
 /**
  * The main function for the action.
@@ -7,20 +10,58 @@ import { wait } from './wait';
  */
 export async function run(): Promise<void> {
   try {
-    const ms: string = core.getInput('milliseconds');
-
-    // Debug logs are only output if the `ACTIONS_STEP_DEBUG` secret is true
-    core.debug(`Waiting ${ms} milliseconds ...`);
-
-    // Log the current timestamp, wait, then log the new timestamp
-    core.debug(new Date().toTimeString());
-    await wait(parseInt(ms, 10));
-    core.debug(new Date().toTimeString());
-
-    // Set outputs for other workflow steps to use
-    core.setOutput('time', new Date().toTimeString());
+    const files = core.getInput('files');
+    const globber = await glob.create(files);
+    const filenames = await globber.glob();
+    for (const filename of filenames) {
+      core.info(`Looking at ${filename}`);
+      await processFile(filename);
+    }
   } catch (error) {
     // Fail the workflow run if an error occurs
     if (error instanceof Error) core.setFailed(error.message);
   }
+}
+
+// interface ConfigNode {
+//   pathInConfigFile: string[];
+//   repoURL: string;
+//   path: string;
+//   trackMutableRef: string;
+// }
+
+export async function processFile(filename: string): Promise<void> {
+  const contents = await readFile(filename, 'utf-8');
+  const doc = yaml.parseDocument(contents);
+  if (doc.errors.length) {
+    core.error(`Errors parsing YAML file ${filename}; skipping processing`);
+    for (const error of doc.errors) {
+      core.error(error.message);
+    }
+    return;
+  }
+  if (doc.warnings.length) {
+    core.warning(`Warnings parsing YAML file ${filename}`);
+    for (const warning of doc.warnings) {
+      core.warning(warning.message);
+    }
+  }
+
+  yaml.visit(doc, {
+    Map(_, node, ancestry) {
+      if (
+        node.has('trackMutableRef') &&
+        node.has('repoURL') &&
+        node.has('path')
+      ) {
+        const pathInConfigFile = ancestry
+          .filter(yaml.isPair)
+          .map((pair) => pair.key)
+          .filter(yaml.isScalar)
+          .map((scalar) => scalar.value)
+          .filter(isString);
+        core.info(`path: ${pathInConfigFile.join('.')}`);
+      }
+    },
+  });
 }

@@ -8,85 +8,27 @@
 
 import * as core from '@actions/core';
 import * as main from '../src/main';
-
-// Mock the action's main function
-const runMock = jest.spyOn(main, 'run');
-
-// Other utilities
-const timeRegex = /^\d{2}:\d{2}:\d{2}/;
+import { join } from 'path';
 
 // Mock the GitHub Actions core library
-let debugMock: jest.SpyInstance;
-let errorMock: jest.SpyInstance;
-let getInputMock: jest.SpyInstance;
-let setFailedMock: jest.SpyInstance;
-let setOutputMock: jest.SpyInstance;
+let infoMock: jest.SpyInstance;
 
 describe('action', () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
-    debugMock = jest.spyOn(core, 'debug').mockImplementation();
-    errorMock = jest.spyOn(core, 'error').mockImplementation();
-    getInputMock = jest.spyOn(core, 'getInput').mockImplementation();
-    setFailedMock = jest.spyOn(core, 'setFailed').mockImplementation();
-    setOutputMock = jest.spyOn(core, 'setOutput').mockImplementation();
+    infoMock = jest.spyOn(core, 'info').mockImplementation();
   });
 
-  it('sets the time output', async () => {
-    // Set the action's inputs as return values from core.getInput()
-    getInputMock.mockImplementation((name: string): string => {
-      switch (name) {
-        case 'milliseconds':
-          return '500';
-        default:
-          return '';
-      }
-    });
-
-    await main.run();
-    expect(runMock).toHaveReturned();
-
-    // Verify that all of the core library functions were called correctly
-    expect(debugMock).toHaveBeenNthCalledWith(
+  it('processes a file', async () => {
+    await main.processFile(join(__dirname, '__fixtures__', 'sample.yaml'));
+    expect(infoMock).toHaveBeenNthCalledWith(
       1,
-      'Waiting 500 milliseconds ...',
+      'path: some-service-dev0.source',
     );
-    expect(debugMock).toHaveBeenNthCalledWith(
+    expect(infoMock).toHaveBeenNthCalledWith(
       2,
-      expect.stringMatching(timeRegex),
+      'path: some-service-staging.source',
     );
-    expect(debugMock).toHaveBeenNthCalledWith(
-      3,
-      expect.stringMatching(timeRegex),
-    );
-    expect(setOutputMock).toHaveBeenNthCalledWith(
-      1,
-      'time',
-      expect.stringMatching(timeRegex),
-    );
-    expect(errorMock).not.toHaveBeenCalled();
-  });
-
-  it('sets a failed status', async () => {
-    // Set the action's inputs as return values from core.getInput()
-    getInputMock.mockImplementation((name: string): string => {
-      switch (name) {
-        case 'milliseconds':
-          return 'this is not a number';
-        default:
-          return '';
-      }
-    });
-
-    await main.run();
-    expect(runMock).toHaveReturned();
-
-    // Verify that all of the core library functions were called correctly
-    expect(setFailedMock).toHaveBeenNthCalledWith(
-      1,
-      'milliseconds not a number',
-    );
-    expect(errorMock).not.toHaveBeenCalled();
   });
 });
