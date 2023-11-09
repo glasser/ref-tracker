@@ -2,6 +2,7 @@ some-service-dev0:
   source:
     repoURL: https://github.com/apollographql/some-repo.git
     path: services/hello-world
+    ref: "abcdef"
     trackMutableRef: pr-1234
 
 some-service-staging:
