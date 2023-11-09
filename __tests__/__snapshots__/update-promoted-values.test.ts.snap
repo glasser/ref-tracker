@@ -1,0 +1,29 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`action updates git refs 1`] = `
+"some-service-staging:
+  source:
+    repoURL: https://github.com/apollographql/some-repo.git
+    path: services/hello-world
+    trackMutableRef: main
+    ref:        "abcdef1234567"
+
+some-service-prod:
+  promote:
+    from: some-service-staging
+    values: [[source, ref]]
+  source:
+    repoURL: https://github.com/apollographql/some-repo.git
+    path: services/hello-world
+    ref:    abcdef1234567      # please
+
+some-service-not-selected:
+  promote:
+    from: some-service-staging
+    values: [[source, ref]]
+  source:
+    repoURL: https://github.com/apollographql/some-repo.git
+    path: services/hello-world
+    ref:    overwrite-me      # this will not be updated because of the regexp
+"
+`;

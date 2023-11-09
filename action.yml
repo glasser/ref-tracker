@@ -1,0 +1,26 @@
+name: 'Ref Tracker'
+description: 'Looks up mutable refs in config files and writes out immutable versions'
+author: 'Apollo GraphQL'
+
+# Define your inputs here.
+inputs:
+  files:
+    description: 'Glob pattern for files to search'
+    required: true
+
+  github-token:
+    description: 'GitHub token to read refs and trees; only needed if update-git-refs is set'
+    required: true
+  
+  update-git-refs:
+    description: 'Process trackMutableRef instructions'
+  
+  update-promoted-values:
+    description: 'Process promote instructions'
+  
+  promotion-target-regexp:
+    description: 'Only process promote instructions for targets matching this regexp'
+
+runs:
+  using: node20
+  main: dist/index.js
