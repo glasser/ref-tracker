@@ -130,14 +130,19 @@ export async function newContentsForFile(
   filename: string,
   gitHubClient: GitHubClient,
 ): Promise<string | null> {
+  core.info('reading');
   const contents = await readFile(filename, 'utf-8');
+  core.info('parsing');
   const doc = parseDocument(contents, filename);
   if (!doc) {
     return null;
   }
 
+  core.info('finding trackables');
   const trackables = findTrackables(doc);
+  core.info('updating refs');
   await updateRefsFromGitHub(trackables, gitHubClient);
+  core.info('rewriting refs');
   return rewriteRefs(contents, trackables);
 }
 
