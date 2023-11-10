@@ -1,8 +1,9 @@
 import * as core from '@actions/core';
+import * as github from '@actions/github';
 import * as glob from '@actions/glob';
 import * as yaml from 'yaml';
-import { readFile } from 'fs/promises';
-import { isString } from 'util';
+import { readFile, writeFile } from 'fs/promises';
+import { GitHubClient, OctokitGitHubClient } from './github';
 
 /**
  * The main function for the action.
@@ -10,12 +11,15 @@ import { isString } from 'util';
  */
 export async function run(): Promise<void> {
   try {
+    const githubToken = core.getInput('github-token');
+    const octokit = github.getOctokit(githubToken);
+    const gitHubClient = new OctokitGitHubClient(octokit);
     const files = core.getInput('files');
     const globber = await glob.create(files);
     const filenames = await globber.glob();
     for (const filename of filenames) {
       core.info(`Looking at ${filename}`);
-      await processFile(filename);
+      await processFile(filename, gitHubClient);
     }
   } catch (error) {
     // Fail the workflow run if an error occurs
@@ -28,11 +32,25 @@ interface Trackable {
   repoURL: string;
   path: string;
   ref: string;
+  newRef: string;
   startCharacter: number;
   endCharacter: number;
 }
 
-function parseDocument(contents: string): yaml.Document | null {
+export async function processFile(
+  filename: string,
+  gitHubClient: GitHubClient,
+): Promise<void> {
+  const newContents = await newContentsForFile(filename, gitHubClient);
+  if (newContents !== null) {
+    await writeFile(filename, newContents);
+  }
+}
+
+export function parseDocument(
+  contents: string,
+  filename: string,
+): yaml.Document | null {
   const doc = yaml.parseDocument(contents);
   if (doc.errors.length) {
     core.error(`Errors parsing YAML file ${filename}; skipping processing`);
@@ -50,7 +68,7 @@ function parseDocument(contents: string): yaml.Document | null {
   return doc;
 }
 
-function findTrackables(doc: yaml.Document): Trackable[] {
+export function findTrackables(doc: yaml.Document): Trackable[] {
   const trackables: Trackable[] = [];
 
   // FIXME figure out error handling
@@ -93,6 +111,7 @@ function findTrackables(doc: yaml.Document): Trackable[] {
           repoURL,
           path,
           ref,
+          newRef: ref,
           startCharacter,
           endCharacter,
         });
@@ -100,19 +119,73 @@ function findTrackables(doc: yaml.Document): Trackable[] {
     },
   });
 
+  // Just in case we don't produce them in order, make them be in order now.
+  trackables.sort((a, b) => a.startCharacter - b.startCharacter);
+
   return trackables;
 }
 
-export async function processFile(filename: string): Promise<void> {
+export async function newContentsForFile(
+  filename: string,
+  gitHubClient: GitHubClient,
+): Promise<string | null> {
   const contents = await readFile(filename, 'utf-8');
-  const doc = parseDocument(contents);
+  const doc = parseDocument(contents, filename);
   if (!doc) {
-    return;
+    return null;
   }
 
   const trackables = findTrackables(doc);
+  await updateRefsFromGitHub(trackables, gitHubClient);
+  return rewriteRefs(contents, trackables);
+}
 
-  // FIXME use GH client to do the tracking
-  // FIXME do the edit
-  // FIXME write the file back
+export async function updateRefsFromGitHub(
+  trackables: Trackable[],
+  gitHubClient: GitHubClient,
+) {
+  for (const trackable of trackables) {
+    // FIXME error handling
+    trackable.newRef = await gitHubClient.resolveRefToSha({
+      repoURL: trackable.repoURL,
+      ref: trackable.ref,
+    });
+  }
+}
+
+export function rewriteRefs(contents: string, trackables: Trackable[]): string {
+  // First, let's validate that the substrings we're trying to update come in
+  // order and don't overlap.
+  for (const [i, trackable] of trackables.entries()) {
+    if (trackable.endCharacter <= trackable.startCharacter) {
+      throw Error(
+        `Trackable has end ${trackable.endCharacter} that is not after start ${trackable.startCharacter}`,
+      );
+    }
+    if (i > 0 && trackable.startCharacter < trackables[i - 1].endCharacter) {
+      throw Error(
+        `Trackable has start ${
+          trackable.startCharacter
+        } that is before previous end ${trackables[i - 1].endCharacter}`,
+      );
+    }
+  }
+
+  let adjustment = 0;
+  for (const trackable of trackables) {
+    // Wrap quotes around the ref (needed if the ref is all digits).
+    const newValue = JSON.stringify(trackable.newRef);
+    contents =
+      contents.substring(0, trackable.startCharacter + adjustment) +
+      newValue +
+      contents.substring(trackable.endCharacter + adjustment);
+
+    // If we increased the length of the part we changed, we'll need to increase
+    // all the indexes we use later. If we decrease the length, we'll need to
+    // decrease the indexes.
+    adjustment +=
+      newValue.length - (trackable.endCharacter - trackable.startCharacter);
+  }
+
+  return contents;
 }

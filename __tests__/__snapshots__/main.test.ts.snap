@@ -1,8 +1,11 @@
-some-service-dev0:
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`action finds trackables 1`] = `
+"some-service-dev0:
   source:
     repoURL: https://github.com/apollographql/some-repo.git
     path: services/hello-world
-    ref: "abcdef"   # this should change!
+    ref: "immutable-abcdef-hooray"   # this should change!
     trackMutableRef: pr-1234
 
 some-service-staging:
@@ -10,10 +13,12 @@ some-service-staging:
     repoURL: https://github.com/apollographql/some-repo.git
     path: services/hello-world
     trackMutableRef: main
-    ref:        01234a  #save comment!
+    ref:        "immutable-01234a-hooray"  #save comment!
 
 some-service-prod:
   source:
     repoURL: https://github.com/apollographql/some-repo.git
     path: services/hello-world
     ref: abcdef1234
+"
+`;
