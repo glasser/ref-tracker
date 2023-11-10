@@ -32374,7 +32374,7 @@ class OctokitGitHubClient {
         this.octokit = octokit;
     }
     async resolveRefToSha({ repoURL, ref, }) {
-        const m = repoURL.match(/\bgithub\.com\/([\w.-]+)\/([\w.-]+?)(?:\.git)?/);
+        const m = repoURL.match(/\bgithub\.com\/([\w.-]+)\/([\w.-]+?)(?:\.git|\/)?$/);
         if (!m) {
             throw Error(`Can only track GitHub repoURLs, not ${repoURL}`);
         }

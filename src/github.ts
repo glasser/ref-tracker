@@ -17,7 +17,9 @@ export class OctokitGitHubClient {
     repoURL,
     ref,
   }: ResolveRefToShaOptions): Promise<string> {
-    const m = repoURL.match(/\bgithub\.com\/([\w.-]+)\/([\w.-]+?)(?:\.git)?/);
+    const m = repoURL.match(
+      /\bgithub\.com\/([\w.-]+)\/([\w.-]+?)(?:\.git|\/)?$/,
+    );
     if (!m) {
       throw Error(`Can only track GitHub repoURLs, not ${repoURL}`);
     }
