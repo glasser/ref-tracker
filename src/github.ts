@@ -1,4 +1,5 @@
 import { getOctokit } from '@actions/github';
+import * as core from '@actions/core';
 
 export interface ResolveRefToShaOptions {
   repoURL: string;
@@ -20,6 +21,7 @@ export class OctokitGitHubClient {
     if (!m) {
       throw Error(`Can only track GitHub repoURLs, not ${repoURL}`);
     }
+    core.info(`owner '${m[1]}' repo '${m[2]}' ref '${ref}'`);
     const sha = (
       await this.octokit.rest.repos.getCommit({
         owner: m[1],
