@@ -13,6 +13,7 @@ export async function run(): Promise<void> {
   try {
     const githubToken = core.getInput('github-token');
     const octokit = github.getOctokit(githubToken);
+    // FIXME consider adding @octokit/plugin-throttling
     const gitHubClient = new OctokitGitHubClient(octokit);
     const files = core.getInput('files');
     const globber = await glob.create(files);

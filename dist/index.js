@@ -32349,8 +32349,24 @@ class OctokitGitHubClient {
     constructor(octokit) {
         this.octokit = octokit;
     }
-    async resolveRefToSha() {
-        return '';
+    async resolveRefToSha({ repoURL, ref, }) {
+        const m = repoURL.match(/\bgithub\.com\/([\w.-]+)\/([\w.-]+?)(?:\.git)?/);
+        if (!m) {
+            throw Error(`Can only track GitHub repoURLs, not ${repoURL}`);
+        }
+        const sha = (await this.octokit.rest.repos.getCommit({
+            owner: m[1],
+            repo: m[2],
+            ref,
+            mediaType: {
+                format: 'sha',
+            },
+        })).data;
+        // TS types don't understand the effect of format: 'sha'.
+        if (typeof sha !== 'string') {
+            throw Error('Expected string response');
+        }
+        return sha;
     }
 }
 exports.OctokitGitHubClient = OctokitGitHubClient;
@@ -32402,6 +32418,7 @@ async function run() {
     try {
         const githubToken = core.getInput('github-token');
         const octokit = github.getOctokit(githubToken);
+        // FIXME consider adding @octokit/plugin-throttling
         const gitHubClient = new github_1.OctokitGitHubClient(octokit);
         const files = core.getInput('files');
         const globber = await glob.create(files);
