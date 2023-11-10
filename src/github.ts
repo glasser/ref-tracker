@@ -1,4 +1,4 @@
-import { Octokit } from '@octokit/core';
+import { getOctokit } from '@actions/github';
 
 export interface ResolveRefToShaOptions {
   repoURL: string;
@@ -10,8 +10,9 @@ export interface GitHubClient {
 }
 
 export class OctokitGitHubClient {
-  constructor(private octokit: Octokit) {}
-  async resolveRefToSha(): Promise<string> {
+  constructor(private octokit: ReturnType<typeof getOctokit>) {}
+  async resolveRefToSha(options: ResolveRefToShaOptions): Promise<string> {
+    //this.octokit.re;
     return '';
   }
 }
