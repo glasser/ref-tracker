@@ -143,7 +143,7 @@ export async function newContentsForFile(
 export async function updateRefsFromGitHub(
   trackables: Trackable[],
   gitHubClient: GitHubClient,
-) {
+): Promise<void> {
   for (const trackable of trackables) {
     // FIXME error handling
     trackable.newRef = await gitHubClient.resolveRefToSha({

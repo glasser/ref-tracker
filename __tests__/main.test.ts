@@ -6,11 +6,8 @@
  * variables following the pattern `INPUT_<INPUT_NAME>`.
  */
 
-import * as core from '@actions/core';
 import * as main from '../src/main';
 import { join } from 'path';
-import { readFile } from 'fs/promises';
-import assert from 'assert';
 
 // Mock the GitHub Actions core library
 // let infoMock: jest.SpyInstance;
