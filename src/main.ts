@@ -154,7 +154,7 @@ export async function updateRefsFromGitHub(
     // FIXME error handling
     trackable.newRef = await gitHubClient.resolveRefToSha({
       repoURL: trackable.repoURL,
-      ref: trackable.ref,
+      ref: trackable.trackMutableRef,
     });
   }
 }
