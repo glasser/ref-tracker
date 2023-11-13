@@ -32407,7 +32407,7 @@ class OctokitGitHubClient {
             ref,
             path,
             mediaType: {
-                format: 'raw',
+                format: 'object',
             },
         });
         core.info(`Got content ${JSON.stringify(content, null, 2)}`);
