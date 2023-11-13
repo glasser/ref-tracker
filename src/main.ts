@@ -173,6 +173,12 @@ export async function updateRefsFromGitHub(
     // (https://git-scm.com/book/en/v2/Git-Internals-Git-Objects#_tree_objects)
     // at the given path to see if it has changed between `trackable.ref` and
     // the SHA we're thinking about replacing it with.
+    const sha = await gitHubClient.getTreeSHAForPath({
+      repoURL: trackable.repoURL,
+      ref: trackable.ref,
+      path: trackable.path,
+    });
+    core.info(`got sha ${sha}`);
   }
 }
 
