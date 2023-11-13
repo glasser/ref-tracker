@@ -152,10 +152,27 @@ export async function updateRefsFromGitHub(
 ): Promise<void> {
   for (const trackable of trackables) {
     // FIXME error handling
-    trackable.newRef = await gitHubClient.resolveRefToSha({
+    const mutableRefCurrentSHA = await gitHubClient.resolveRefToSha({
       repoURL: trackable.repoURL,
       ref: trackable.trackMutableRef,
     });
+
+    if (trackable.ref === trackable.trackMutableRef) {
+      // The mutable ref was written down in ref too. We always want to replace
+      // that with the SHA (and if we do the path-based check below we won't,
+      // because they're the same). This is something that might happen when
+      // you're first adding an app (ie just writing the same thing twice and
+      // letting the automation "correct" it to a SHA).
+      trackable.newRef = mutableRefCurrentSHA;
+      continue;
+    }
+
+    // OK, we've got a SHA that we could overwrite the current ref
+    // (`trackable.ref`) with in the config file. But we don't want to do this
+    // if it would be a no-op. Let's check the tree SHA
+    // (https://git-scm.com/book/en/v2/Git-Internals-Git-Objects#_tree_objects)
+    // at the given path to see if it has changed between `trackable.ref` and
+    // the SHA we're thinking about replacing it with.
   }
 }
 

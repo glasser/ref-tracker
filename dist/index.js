@@ -32368,30 +32368,50 @@ var __importStar = (this && this.__importStar) || function (mod) {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.OctokitGitHubClient = void 0;
 const core = __importStar(__nccwpck_require__(2186));
+function parseRepoURL(repoURL) {
+    const m = repoURL.match(/\bgithub\.com\/([\w.-]+)\/([\w.-]+?)(?:\.git|\/)?$/);
+    if (!m) {
+        throw Error(`Can only track GitHub repoURLs, not ${repoURL}`);
+    }
+    return { owner: m[1], repo: m[2] };
+}
 class OctokitGitHubClient {
     octokit;
     constructor(octokit) {
         this.octokit = octokit;
     }
     async resolveRefToSha({ repoURL, ref, }) {
-        const m = repoURL.match(/\bgithub\.com\/([\w.-]+)\/([\w.-]+?)(?:\.git|\/)?$/);
-        if (!m) {
-            throw Error(`Can only track GitHub repoURLs, not ${repoURL}`);
-        }
-        core.info(`owner '${m[1]}' repo '${m[2]}' ref '${ref}'`);
+        const { owner, repo } = parseRepoURL(repoURL);
         const sha = (await this.octokit.rest.repos.getCommit({
-            owner: m[1],
-            repo: m[2],
+            owner,
+            repo,
             ref,
             mediaType: {
                 format: 'sha',
             },
         })).data;
-        // TS types don't understand the effect of format: 'sha'.
+        // The TS types don't understand that `mediaType: {format: 'sha'}` turns
+        // `.data` into a string, so we have to cast to `unknown` and check
+        // ourselves.
         if (typeof sha !== 'string') {
             throw Error('Expected string response');
         }
         return sha;
+    }
+    async getTreeSHAForPath({ repoURL, ref, path, }) {
+        const { owner, repo } = parseRepoURL(repoURL);
+        // FIXME error handling
+        const content = await this.octokit.rest.repos.getContent({
+            owner,
+            repo,
+            ref,
+            path,
+            // mediaType: {
+            //   format: 'raw'
+            // }
+        });
+        core.info(`Got content ${JSON.stringify(content, null, 2)}`);
+        return 'yay';
     }
 }
 exports.OctokitGitHubClient = OctokitGitHubClient;
@@ -32555,10 +32575,25 @@ exports.newContentsForFile = newContentsForFile;
 async function updateRefsFromGitHub(trackables, gitHubClient) {
     for (const trackable of trackables) {
         // FIXME error handling
-        trackable.newRef = await gitHubClient.resolveRefToSha({
+        const mutableRefCurrentSHA = await gitHubClient.resolveRefToSha({
             repoURL: trackable.repoURL,
             ref: trackable.trackMutableRef,
         });
+        if (trackable.ref === trackable.trackMutableRef) {
+            // The mutable ref was written down in ref too. We always want to replace
+            // that with the SHA (and if we do the path-based check below we won't,
+            // because they're the same). This is something that might happen when
+            // you're first adding an app (ie just writing the same thing twice and
+            // letting the automation "correct" it to a SHA).
+            trackable.newRef = mutableRefCurrentSHA;
+            continue;
+        }
+        // OK, we've got a SHA that we could overwrite the current ref
+        // (`trackable.ref`) with in the config file. But we don't want to do this
+        // if it would be a no-op. Let's check the tree SHA
+        // (https://git-scm.com/book/en/v2/Git-Internals-Git-Objects#_tree_objects)
+        // at the given path to see if it has changed between `trackable.ref` and
+        // the SHA we're thinking about replacing it with.
     }
 }
 exports.updateRefsFromGitHub = updateRefsFromGitHub;
