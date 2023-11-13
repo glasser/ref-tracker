@@ -69,9 +69,9 @@ export class OctokitGitHubClient {
       repo,
       ref,
       path,
-      // mediaType: {
-      //   format: 'raw'
-      // }
+      mediaType: {
+        format: 'raw',
+      },
     });
     core.info(`Got content ${JSON.stringify(content, null, 2)}`);
     return 'yay';
