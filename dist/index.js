@@ -32338,36 +32338,12 @@ function wrappy (fn, cb) {
 /***/ }),
 
 /***/ 978:
-/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+/***/ ((__unused_webpack_module, exports) => {
 
 "use strict";
 
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
-};
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.OctokitGitHubClient = void 0;
-const core = __importStar(__nccwpck_require__(2186));
 function parseRepoURL(repoURL) {
     const m = repoURL.match(/\bgithub\.com\/([\w.-]+)\/([\w.-]+?)(?:\.git|\/)?$/);
     if (!m) {
@@ -32401,7 +32377,7 @@ class OctokitGitHubClient {
     async getTreeSHAForPath({ repoURL, ref, path, }) {
         const { owner, repo } = parseRepoURL(repoURL);
         // FIXME error handling
-        const content = await this.octokit.rest.repos.getContent({
+        const data = (await this.octokit.rest.repos.getContent({
             owner,
             repo,
             ref,
@@ -32409,9 +32385,18 @@ class OctokitGitHubClient {
             mediaType: {
                 format: 'object',
             },
-        });
-        core.info(`Got content ${JSON.stringify(content, null, 2)}`);
-        return 'yay';
+        })).data;
+        // TS types seem confused here too; this works in practice.
+        if (!(typeof data === 'object' &&
+            data !== null &&
+            'type' in data &&
+            data.type === 'dir' &&
+            'sha' in data &&
+            typeof data.sha === 'string')) {
+            // FIXME better error handling.
+            throw Error('response does not appear to be a tree');
+        }
+        return data.sha;
     }
 }
 exports.OctokitGitHubClient = OctokitGitHubClient;
@@ -32588,18 +32573,34 @@ async function updateRefsFromGitHub(trackables, gitHubClient) {
             trackable.newRef = mutableRefCurrentSHA;
             continue;
         }
+        if (trackable.ref === mutableRefCurrentSHA) {
+            // The thing we would write is already in the file.
+            continue;
+        }
         // OK, we've got a SHA that we could overwrite the current ref
         // (`trackable.ref`) with in the config file. But we don't want to do this
         // if it would be a no-op. Let's check the tree SHA
         // (https://git-scm.com/book/en/v2/Git-Internals-Git-Objects#_tree_objects)
         // at the given path to see if it has changed between `trackable.ref` and
         // the SHA we're thinking about replacing it with.
-        const sha = await gitHubClient.getTreeSHAForPath({
+        const currentTreeSHA = await gitHubClient.getTreeSHAForPath({
             repoURL: trackable.repoURL,
             ref: trackable.ref,
             path: trackable.path,
         });
-        core.info(`got sha ${sha}`);
+        const newTreeSHA = await gitHubClient.getTreeSHAForPath({
+            repoURL: trackable.repoURL,
+            ref: mutableRefCurrentSHA,
+            path: trackable.path,
+        });
+        core.info(`for path ${trackable.path}, got tree shas ${currentTreeSHA} for ${trackable.ref} and ${newTreeSHA} for ${mutableRefCurrentSHA}`);
+        if (currentTreeSHA === newTreeSHA) {
+            core.info('(unchanged)');
+        }
+        else {
+            core.info('(changed!)');
+            trackable.newRef = mutableRefCurrentSHA;
+        }
     }
 }
 exports.updateRefsFromGitHub = updateRefsFromGitHub;

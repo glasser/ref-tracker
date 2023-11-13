@@ -167,18 +167,36 @@ export async function updateRefsFromGitHub(
       continue;
     }
 
+    if (trackable.ref === mutableRefCurrentSHA) {
+      // The thing we would write is already in the file.
+      continue;
+    }
+
     // OK, we've got a SHA that we could overwrite the current ref
     // (`trackable.ref`) with in the config file. But we don't want to do this
     // if it would be a no-op. Let's check the tree SHA
     // (https://git-scm.com/book/en/v2/Git-Internals-Git-Objects#_tree_objects)
     // at the given path to see if it has changed between `trackable.ref` and
     // the SHA we're thinking about replacing it with.
-    const sha = await gitHubClient.getTreeSHAForPath({
+    const currentTreeSHA = await gitHubClient.getTreeSHAForPath({
       repoURL: trackable.repoURL,
       ref: trackable.ref,
       path: trackable.path,
     });
-    core.info(`got sha ${sha}`);
+    const newTreeSHA = await gitHubClient.getTreeSHAForPath({
+      repoURL: trackable.repoURL,
+      ref: mutableRefCurrentSHA,
+      path: trackable.path,
+    });
+    core.info(
+      `for path ${trackable.path}, got tree shas ${currentTreeSHA} for ${trackable.ref} and ${newTreeSHA} for ${mutableRefCurrentSHA}`,
+    );
+    if (currentTreeSHA === newTreeSHA) {
+      core.info('(unchanged)');
+    } else {
+      core.info('(changed!)');
+      trackable.newRef = mutableRefCurrentSHA;
+    }
   }
 }
 

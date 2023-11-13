@@ -64,16 +64,31 @@ export class OctokitGitHubClient {
   }: GetTreeSHAForPathOptions): Promise<string> {
     const { owner, repo } = parseRepoURL(repoURL);
     // FIXME error handling
-    const content = await this.octokit.rest.repos.getContent({
-      owner,
-      repo,
-      ref,
-      path,
-      mediaType: {
-        format: 'object',
-      },
-    });
-    core.info(`Got content ${JSON.stringify(content, null, 2)}`);
-    return 'yay';
+    const data = (
+      await this.octokit.rest.repos.getContent({
+        owner,
+        repo,
+        ref,
+        path,
+        mediaType: {
+          format: 'object',
+        },
+      })
+    ).data as unknown;
+    // TS types seem confused here too; this works in practice.
+    if (
+      !(
+        typeof data === 'object' &&
+        data !== null &&
+        'type' in data &&
+        data.type === 'dir' &&
+        'sha' in data &&
+        typeof data.sha === 'string'
+      )
+    ) {
+      // FIXME better error handling.
+      throw Error('response does not appear to be a tree');
+    }
+    return data.sha;
   }
 }
