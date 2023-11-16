@@ -1,5 +1,4 @@
 import { getOctokit } from '@actions/github';
-import * as core from '@actions/core';
 
 export interface ResolveRefToShaOptions {
   repoURL: string;
@@ -14,7 +13,7 @@ export interface GetTreeSHAForPathOptions {
 
 export interface GitHubClient {
   resolveRefToSha(options: ResolveRefToShaOptions): Promise<string>;
-  getTreeSHAForPath(options: GetTreeSHAForPathOptions): Promise<string>;
+  getTreeSHAForPath(options: GetTreeSHAForPathOptions): Promise<string | null>;
 }
 
 interface OwnerAndRepo {
@@ -61,20 +60,29 @@ export class OctokitGitHubClient {
     repoURL,
     ref,
     path,
-  }: GetTreeSHAForPathOptions): Promise<string> {
+  }: GetTreeSHAForPathOptions): Promise<string | null> {
     const { owner, repo } = parseRepoURL(repoURL);
+    let data;
     // FIXME error handling
-    const data = (
-      await this.octokit.rest.repos.getContent({
-        owner,
-        repo,
-        ref,
-        path,
-        mediaType: {
-          format: 'object',
-        },
-      })
-    ).data as unknown;
+    try {
+      data = (
+        await this.octokit.rest.repos.getContent({
+          owner,
+          repo,
+          ref,
+          path,
+          mediaType: {
+            format: 'object',
+          },
+        })
+      ).data as unknown;
+    } catch (e: unknown) {
+      // If it looks like "not found" just return null.
+      if (typeof e === 'object' && e && 'status' in e && e.status === 404) {
+        return null;
+      }
+      throw e;
+    }
     // TS types seem confused here too; this works in practice.
     if (
       !(

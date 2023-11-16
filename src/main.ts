@@ -34,6 +34,7 @@ interface Trackable {
   path: string;
   ref: string;
   newRef: string;
+  refScalar: yaml.Scalar;
   startCharacter: number;
   endCharacter: number;
 }
@@ -52,7 +53,7 @@ export function parseDocument(
   contents: string,
   filename: string,
 ): yaml.Document | null {
-  const doc = yaml.parseDocument(contents);
+  const doc = yaml.parseDocument(contents, { keepSourceTokens: true });
   if (doc.errors.length) {
     core.error(`Errors parsing YAML file ${filename}; skipping processing`);
     for (const error of doc.errors) {
@@ -113,6 +114,7 @@ export function findTrackables(doc: yaml.Document): Trackable[] {
           path,
           ref,
           newRef: ref,
+          refScalar,
           startCharacter,
           endCharacter,
         });
@@ -142,6 +144,10 @@ export async function newContentsForFile(
   const trackables = findTrackables(doc);
   core.info('updating refs');
   await updateRefsFromGitHub(trackables, gitHubClient);
+  for (const trackable of trackables) {
+    yaml.CST.setScalarValue(trackable.refScalar.srcToken!, trackable.newRef);
+  }
+  core.info(`got ${yaml.CST.stringify(doc.contents?.srcToken!)}`);
   core.info('rewriting refs');
   return rewriteRefs(contents, trackables);
 }
@@ -188,6 +194,13 @@ export async function updateRefsFromGitHub(
       ref: mutableRefCurrentSHA,
       path: trackable.path,
     });
+    if (newTreeSHA === null) {
+      throw Error(
+        `Could not get tree SHA for ${mutableRefCurrentSHA} in ${trackable.repoURL} for ref ${trackable.path}`,
+      );
+    }
+    // It's OK if the current one is null because that's what we're overwriting, but we shouldn't
+    // overwrite *to* something that doesn't exist.
     core.info(
       `for path ${trackable.path}, got tree shas ${currentTreeSHA} for ${trackable.ref} and ${newTreeSHA} for ${mutableRefCurrentSHA}`,
     );
