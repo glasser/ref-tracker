@@ -28,15 +28,14 @@ export async function run(): Promise<void> {
   }
 }
 
+type CSTScalarToken = yaml.CST.FlowScalar | yaml.CST.BlockScalar;
+
 interface Trackable {
   trackMutableRef: string;
   repoURL: string;
   path: string;
   ref: string;
-  newRef: string;
-  refScalar: yaml.Scalar;
-  startCharacter: number;
-  endCharacter: number;
+  refScalarToken: CSTScalarToken;
 }
 
 export async function processFile(
@@ -49,81 +48,71 @@ export async function processFile(
   }
 }
 
-export function parseDocument(
-  contents: string,
-  filename: string,
-): yaml.Document | null {
-  const doc = yaml.parseDocument(contents, { keepSourceTokens: true });
-  if (doc.errors.length) {
-    core.error(`Errors parsing YAML file ${filename}; skipping processing`);
-    for (const error of doc.errors) {
-      core.error(error.message);
-    }
+// Returns null if the value isn't there at all; throws if it's there but isn't
+// a string.
+function getStringValue(
+  node: yaml.CST.BlockMap | yaml.CST.FlowCollection,
+  key: string,
+): string | null {
+  const scalarToken = getScalarTokenFromMap(node, key);
+  if (scalarToken === null) {
     return null;
   }
-  if (doc.warnings.length) {
-    core.warning(`Warnings parsing YAML file ${filename}`);
-    for (const warning of doc.warnings) {
-      core.warning(warning.message);
-    }
-  }
-  return doc;
+  // FIXME this can throw
+  return yaml.CST.resolveAsScalar(scalarToken).value;
 }
 
-export function findTrackables(doc: yaml.Document): Trackable[] {
+function getScalarTokenFromMap(
+  node: yaml.CST.BlockMap | yaml.CST.FlowCollection,
+  key: string,
+): CSTScalarToken | null {
+  for (const item of node.items) {
+    if (!yaml.CST.isScalar(item.key)) {
+      continue;
+    }
+    // FIXME this can throw
+    const keyScalar = yaml.CST.resolveAsScalar(item.key);
+    if (keyScalar.value !== key) {
+      continue;
+    }
+    if (!yaml.CST.isScalar(item.value)) {
+      throw Error(`Value associated with ${key} is not a scalar`);
+    }
+    return item.value;
+  }
+  return null;
+}
+
+export function findTrackables(doc: yaml.CST.Document): Trackable[] {
   const trackables: Trackable[] = [];
 
   // FIXME figure out error handling
 
-  yaml.visit(doc, {
-    Map(_, node) {
-      if (
-        node.has('trackMutableRef') &&
-        node.has('repoURL') &&
-        node.has('path') &&
-        node.has('ref')
-      ) {
-        const trackMutableRef = node.get('trackMutableRef');
-        if (typeof trackMutableRef !== 'string') {
-          throw Error(`trackMutableRef value must be a string`);
-        }
-        const repoURL = node.get('repoURL');
-        if (typeof repoURL !== 'string') {
-          throw Error(`repoURL value must be a string`);
-        }
-        const path = node.get('path');
-        if (typeof path !== 'string') {
-          throw Error(`path value must be a string`);
-        }
-        const refScalar = node.get('ref', true);
-        if (!yaml.isScalar(refScalar)) {
-          throw Error('ref value must be a scalar');
-        }
-        const ref = refScalar.value;
-        if (typeof ref !== 'string') {
-          throw Error('ref value must be a string');
-        }
-        if (!refScalar.range) {
-          // Shouldn't happen for a Scalar created by the parser.
-          throw Error('YAML for ref does not say where it lives');
-        }
-        const [startCharacter, endCharacter] = refScalar.range;
-        trackables.push({
-          trackMutableRef,
-          repoURL,
-          path,
-          ref,
-          newRef: ref,
-          refScalar,
-          startCharacter,
-          endCharacter,
-        });
-      }
-    },
-  });
+  yaml.CST.visit(doc, ({ key, value }) => {
+    if (
+      !value ||
+      (value.type !== 'block-map' && value.type !== 'flow-collection')
+    ) {
+      return;
+    }
 
-  // Just in case we don't produce them in order, make them be in order now.
-  trackables.sort((a, b) => a.startCharacter - b.startCharacter);
+    const trackMutableRef = getStringValue(value, 'trackMutableRef');
+    const repoURL = getStringValue(value, 'repoURL');
+    const path = getStringValue(value, 'path');
+    const refScalarToken = getScalarTokenFromMap(value, 'ref');
+    const ref = refScalarToken
+      ? yaml.CST.resolveAsScalar(refScalarToken).value
+      : null;
+    if (trackMutableRef && repoURL && path && refScalarToken && ref) {
+      trackables.push({
+        trackMutableRef,
+        repoURL,
+        path,
+        ref,
+        refScalarToken,
+      });
+    }
+  });
 
   return trackables;
 }
@@ -135,21 +124,38 @@ export async function newContentsForFile(
   core.info('reading');
   const contents = await readFile(filename, 'utf-8');
   core.info('parsing');
-  const doc = parseDocument(contents, filename);
-  if (!doc) {
-    return null;
-  }
+  const topLevelTokens = [...new yaml.Parser().parse(contents)];
 
   core.info('finding trackables');
-  const trackables = findTrackables(doc);
+  const trackables: Trackable[] = [];
+  for (const topLevelToken of topLevelTokens) {
+    if (topLevelToken.type !== 'document') {
+      continue;
+    }
+    trackables.push(...findTrackables(topLevelToken));
+  }
+
   core.info('updating refs');
   await updateRefsFromGitHub(trackables, gitHubClient);
-  for (const trackable of trackables) {
-    yaml.CST.setScalarValue(trackable.refScalar.srcToken!, trackable.newRef);
-  }
-  core.info(`got ${yaml.CST.stringify(doc.contents?.srcToken!)}`);
-  core.info('rewriting refs');
-  return rewriteRefs(contents, trackables);
+  core.info('stringifying');
+  return topLevelTokens.map((token) => yaml.CST.stringify(token)).join('');
+}
+
+function setStringValue(scalarToken: CSTScalarToken, value: string) {
+  const alreadyQuoted =
+    scalarToken.type === 'single-quoted-scalar' ||
+    scalarToken.type === 'double-quoted-scalar' ||
+    scalarToken.type === 'block-scalar';
+  yaml.CST.setScalarValue(scalarToken, value, {
+    // We're working on the CST, not the AST, so there's no schema, which means
+    // that the yaml library doesn't understand the difference between (say)
+    // numbers and bools and strings. So it doesn't let you say "hey, try to
+    // keep this plain (unquoted), unless it looks like a number". So we're
+    // going to make sure everything we write ends up quoted. That said, if it's
+    // already quoted, we'll keep the quote style rather than normalizing to
+    // only one style of quotes (passing `type: undefined` does that).
+    type: alreadyQuoted ? undefined : 'QUOTE_SINGLE',
+  });
 }
 
 export async function updateRefsFromGitHub(
@@ -169,7 +175,7 @@ export async function updateRefsFromGitHub(
       // because they're the same). This is something that might happen when
       // you're first adding an app (ie just writing the same thing twice and
       // letting the automation "correct" it to a SHA).
-      trackable.newRef = mutableRefCurrentSHA;
+      setStringValue(trackable.refScalarToken, mutableRefCurrentSHA);
       continue;
     }
 
@@ -208,44 +214,7 @@ export async function updateRefsFromGitHub(
       core.info('(unchanged)');
     } else {
       core.info('(changed!)');
-      trackable.newRef = mutableRefCurrentSHA;
+      setStringValue(trackable.refScalarToken, mutableRefCurrentSHA);
     }
   }
-}
-
-export function rewriteRefs(contents: string, trackables: Trackable[]): string {
-  // First, let's validate that the substrings we're trying to update come in
-  // order and don't overlap.
-  for (const [i, trackable] of trackables.entries()) {
-    if (trackable.endCharacter <= trackable.startCharacter) {
-      throw Error(
-        `Trackable has end ${trackable.endCharacter} that is not after start ${trackable.startCharacter}`,
-      );
-    }
-    if (i > 0 && trackable.startCharacter < trackables[i - 1].endCharacter) {
-      throw Error(
-        `Trackable has start ${
-          trackable.startCharacter
-        } that is before previous end ${trackables[i - 1].endCharacter}`,
-      );
-    }
-  }
-
-  let adjustment = 0;
-  for (const trackable of trackables) {
-    // Wrap quotes around the ref (needed if the ref is all digits).
-    const newValue = JSON.stringify(trackable.newRef);
-    contents =
-      contents.substring(0, trackable.startCharacter + adjustment) +
-      newValue +
-      contents.substring(trackable.endCharacter + adjustment);
-
-    // If we increased the length of the part we changed, we'll need to increase
-    // all the indexes we use later. If we decrease the length, we'll need to
-    // decrease the indexes.
-    adjustment +=
-      newValue.length - (trackable.endCharacter - trackable.startCharacter);
-  }
-
-  return contents;
 }

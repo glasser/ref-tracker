@@ -2,7 +2,14 @@ some-service-dev0:
   source:
     repoURL: https://github.com/apollographql/some-repo.git
     path: services/hello-world
-    ref: "abcdef"   # this should change!
+    ref: "abcdef"   # this should change but stay double-quoted!
+    trackMutableRef: pr-1234
+
+some-service-dev1:
+  source:
+    repoURL: https://github.com/apollographql/some-repo.git
+    path: services/hello-world
+    ref:      'abcdef'   # this should change but stay single-quoted!
     trackMutableRef: pr-1234
 
 some-service-staging:
@@ -10,10 +17,18 @@ some-service-staging:
     repoURL: https://github.com/apollographql/some-repo.git
     path: services/hello-world
     trackMutableRef: main
-    ref:        01234a  #save comment!
+
+    ref:        01234a  #this will get quoted, conservatively
 
 some-service-prod:
   source:
     repoURL: https://github.com/apollographql/some-repo.git
     path: services/hello-world
-    ref: abcdef1234
+    ref: abcdef1234    # NO TOUCHING! No tracking.
+
+another:
+  config:
+    repoURL: https://github.com/apollographql/some-repo.git
+    path: services/hello-world
+    ref: abcdef   # this will definitely need to be quoted
+    trackMutableRef: make-it-numeric

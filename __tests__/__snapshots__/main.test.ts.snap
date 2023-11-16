@@ -5,7 +5,14 @@ exports[`action finds trackables 1`] = `
   source:
     repoURL: https://github.com/apollographql/some-repo.git
     path: services/hello-world
-    ref: "immutable-abcdef-hooray"   # this should change!
+    ref: "immutable-pr-1234-hooray"   # this should change but stay double-quoted!
+    trackMutableRef: pr-1234
+
+some-service-dev1:
+  source:
+    repoURL: https://github.com/apollographql/some-repo.git
+    path: services/hello-world
+    ref:      'immutable-pr-1234-hooray'   # this should change but stay single-quoted!
     trackMutableRef: pr-1234
 
 some-service-staging:
@@ -13,12 +20,20 @@ some-service-staging:
     repoURL: https://github.com/apollographql/some-repo.git
     path: services/hello-world
     trackMutableRef: main
-    ref:        "immutable-01234a-hooray"  #save comment!
+
+    ref:        'immutable-main-hooray'  #this will get quoted, conservatively
 
 some-service-prod:
   source:
     repoURL: https://github.com/apollographql/some-repo.git
     path: services/hello-world
-    ref: abcdef1234
+    ref: abcdef1234    # NO TOUCHING! No tracking.
+
+another:
+  config:
+    repoURL: https://github.com/apollographql/some-repo.git
+    path: services/hello-world
+    ref: '12345678'   # this will definitely need to be quoted
+    trackMutableRef: make-it-numeric
 "
 `;

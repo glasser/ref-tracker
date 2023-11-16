@@ -24,7 +24,14 @@ describe('action', () => {
       join(__dirname, '__fixtures__', 'sample.yaml'),
       {
         async resolveRefToSha({ ref }) {
+          if (ref === 'make-it-numeric') {
+            return '12345678';
+          }
           return `immutable-${ref}-hooray`;
+        },
+        async getTreeSHAForPath({}) {
+          // FIXME test cases where the tree sha does not change
+          return `${Math.random()}`;
         },
       },
     );
