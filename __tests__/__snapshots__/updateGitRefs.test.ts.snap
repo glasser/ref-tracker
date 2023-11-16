@@ -1,6 +1,6 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
-exports[`action finds trackables 1`] = `
+exports[`action updates git refs 1`] = `
 "some-service-dev0:
   source:
     repoURL: https://github.com/apollographql/some-repo.git
