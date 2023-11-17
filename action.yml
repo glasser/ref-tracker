@@ -10,7 +10,6 @@ inputs:
 
   github-token:
     description: 'GitHub token to read refs and trees; only needed if update-git-refs is set'
-    required: true
   
   update-git-refs:
     description: 'Process trackMutableRef instructions'
