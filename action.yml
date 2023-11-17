@@ -13,9 +13,11 @@ inputs:
   
   update-git-refs:
     description: 'Process trackMutableRef instructions'
+    default: 'false'
   
   update-promoted-values:
     description: 'Process promote instructions'
+    default: 'false'
   
   promotion-target-regexp:
     description: 'Only process promote instructions for targets matching this regexp'
