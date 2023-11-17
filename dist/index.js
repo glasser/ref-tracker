@@ -37551,7 +37551,7 @@ var __importStar = (this && this.__importStar) || function (mod) {
     return result;
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.processFile = exports.main = void 0;
+exports.main = void 0;
 const core = __importStar(__nccwpck_require__(2186));
 const github = __importStar(__nccwpck_require__(5438));
 const glob = __importStar(__nccwpck_require__(8090));
@@ -37565,16 +37565,12 @@ const update_promoted_values_1 = __nccwpck_require__(6104);
  */
 async function main() {
     try {
-        const githubToken = core.getInput('github-token');
-        const octokit = github.getOctokit(githubToken);
-        // FIXME consider adding @octokit/plugin-throttling
-        const gitHubClient = new github_1.OctokitGitHubClient(octokit);
         const files = core.getInput('files');
         const globber = await glob.create(files);
         const filenames = await globber.glob();
         for (const filename of filenames) {
             core.info(`Looking at ${filename}`);
-            await processFile(filename, gitHubClient);
+            await processFile(filename);
         }
     }
     catch (error) {
@@ -37584,11 +37580,15 @@ async function main() {
     }
 }
 exports.main = main;
-async function processFile(filename, gitHubClient) {
+async function processFile(filename) {
     return core.group(`Processing ${filename}`, async () => {
         core.info('Reading');
         let contents = await (0, promises_1.readFile)(filename, 'utf-8');
         if (core.getBooleanInput('update-git-refs')) {
+            const githubToken = core.getInput('github-token');
+            const octokit = github.getOctokit(githubToken);
+            // FIXME consider adding @octokit/plugin-throttling
+            const gitHubClient = new github_1.OctokitGitHubClient(octokit);
             contents = await (0, update_git_refs_1.updateGitRefs)(contents, gitHubClient);
         }
         if (core.getBooleanInput('update-promoted-values')) {
@@ -37597,7 +37597,6 @@ async function processFile(filename, gitHubClient) {
         await (0, promises_1.writeFile)(filename, contents);
     });
 }
-exports.processFile = processFile;
 
 
 /***/ }),

@@ -2,7 +2,7 @@ import * as core from '@actions/core';
 import * as github from '@actions/github';
 import * as glob from '@actions/glob';
 import { readFile, writeFile } from 'fs/promises';
-import { GitHubClient, OctokitGitHubClient } from './github';
+import { OctokitGitHubClient } from './github';
 import { updateGitRefs } from './update-git-refs';
 import { updatePromotedValues } from './update-promoted-values';
 
@@ -12,16 +12,12 @@ import { updatePromotedValues } from './update-promoted-values';
  */
 export async function main(): Promise<void> {
   try {
-    const githubToken = core.getInput('github-token');
-    const octokit = github.getOctokit(githubToken);
-    // FIXME consider adding @octokit/plugin-throttling
-    const gitHubClient = new OctokitGitHubClient(octokit);
     const files = core.getInput('files');
     const globber = await glob.create(files);
     const filenames = await globber.glob();
     for (const filename of filenames) {
       core.info(`Looking at ${filename}`);
-      await processFile(filename, gitHubClient);
+      await processFile(filename);
     }
   } catch (error) {
     // Fail the workflow run if an error occurs
@@ -29,15 +25,16 @@ export async function main(): Promise<void> {
   }
 }
 
-export async function processFile(
-  filename: string,
-  gitHubClient: GitHubClient,
-): Promise<void> {
+async function processFile(filename: string): Promise<void> {
   return core.group(`Processing ${filename}`, async () => {
     core.info('Reading');
     let contents = await readFile(filename, 'utf-8');
 
     if (core.getBooleanInput('update-git-refs')) {
+      const githubToken = core.getInput('github-token');
+      const octokit = github.getOctokit(githubToken);
+      // FIXME consider adding @octokit/plugin-throttling
+      const gitHubClient = new OctokitGitHubClient(octokit);
       contents = await updateGitRefs(contents, gitHubClient);
     }
 
