@@ -24,7 +24,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "bundle": "npm run format:write && npm run package",
+    "bundle": "npm run format:write && npm run copy-wasm && npm run package",
     "ci-test": "jest",
     "coverage": "make-coverage-badge --output-path ./badges/coverage.svg",
     "format:write": "prettier --write **/*.ts",
@@ -33,7 +33,8 @@
     "package": "ncc build src/index.ts --license licenses.txt",
     "package:watch": "npm run package -- --watch",
     "test": "jest",
-    "all": "npm run format:write && npm run lint && npm run test && npm run coverage && npm run package"
+    "all": "npm run format:write && npm run lint && npm run test && npm run coverage && npm run copy-wasm && npm run package",
+    "copy-wasm": "cp node_modules/re2-wasm/build/wasm/re2.wasm dist/re2.wasm"
   },
   "license": "MIT",
   "jest": {
