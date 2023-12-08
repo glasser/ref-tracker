@@ -2,7 +2,7 @@
 
 exports[`action updates git refs 1`] = `
 "some-service-staging:
-  source:
+  gitConfig:
     repoURL: https://github.com/apollographql/some-repo.git
     path: services/hello-world
     trackMutableRef: main
@@ -11,8 +11,8 @@ exports[`action updates git refs 1`] = `
 some-service-prod:
   promote:
     from: some-service-staging
-    values: [[source, ref]]
-  source:
+    yamlPaths: [[gitConfig, ref]]
+  gitConfig:
     repoURL: https://github.com/apollographql/some-repo.git
     path: services/hello-world
     ref:    abcdef1234567      # please
@@ -20,8 +20,8 @@ some-service-prod:
 some-service-not-selected:
   promote:
     from: some-service-staging
-    values: [[source, ref]]
-  source:
+    yamlPaths: [[gitConfig, ref]]
+  gitConfig:
     repoURL: https://github.com/apollographql/some-repo.git
     path: services/hello-world
     ref:    overwrite-me      # this will not be updated because of the regexp
