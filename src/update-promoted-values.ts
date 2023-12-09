@@ -1,7 +1,7 @@
 import * as core from '@actions/core';
 import { RE2 } from 're2-wasm';
 import * as yaml from 'yaml';
-import { ScalarTokenWriter } from './yaml';
+import { ScalarTokenWriter, getTopLevelBlocks } from './yaml';
 
 // FIXME we will want to make a way to filter promote-ables so that we can
 // separate "promote to staging" from "promote to dev" for pipelines that have
@@ -11,6 +11,11 @@ interface Promote {
   scalarTokenWriter: ScalarTokenWriter;
   value: string;
 }
+
+const DEFAULT_YAML_PATHS = [
+  ['gitConfig', 'ref'],
+  ['dockerImage', 'tag'],
+];
 
 export async function updatePromotedValues(
   contents: string,
@@ -49,30 +54,13 @@ export async function updatePromotedValues(
 }
 
 function findPromotes(
-  document: yaml.Document,
+  document: yaml.Document.Parsed,
   promotionTargetRE2: RE2 | null,
 ): Promote[] {
-  const topLevelMap = document.contents;
-  if (!yaml.isMap(topLevelMap)) {
-    throw Error(
-      'Top level of YAML document needs to be a map for promote tracking to work',
-    );
-  }
+  const { blocks } = getTopLevelBlocks(document);
   const promotes: Promote[] = [];
-  for (const { key, value: me } of topLevelMap.items) {
-    if (!yaml.isScalar(key)) {
-      continue;
-    }
-    const myName = key.value;
-    if (typeof myName !== 'string') {
-      continue;
-    }
-
+  for (const [myName, me] of blocks) {
     if (promotionTargetRE2 && !promotionTargetRE2.test(myName)) {
-      continue;
-    }
-
-    if (!yaml.isMap(me)) {
       continue;
     }
     if (!me.has('promote')) {
@@ -86,22 +74,55 @@ function findPromotes(
     if (typeof from !== 'string') {
       throw Error(`The value at ${myName}.promote.from must be a string`);
     }
-    const valuesYAMLSeq = promote.get('values');
-    if (!yaml.isSeq(valuesYAMLSeq)) {
-      throw Error(`The value at ${myName}.promote.values must be an array`);
-    }
-    const values = valuesYAMLSeq.toJSON();
-    if (!Array.isArray(values)) {
-      throw Error('YAMLSeq.toJSON surprisingly did not return an array');
-    }
-    if (!values.every(isCollectionPath)) {
+    const fromBlock = blocks.get(from);
+    if (!fromBlock) {
       throw Error(
-        `The value at ${myName}.promote.values must be an array whose elements are arrays of strings or numbers`,
+        `The value at ${myName}.promote.from must reference a top-level key with map value`,
       );
     }
 
-    for (const collectionPath of values) {
-      const sourceValue = topLevelMap.getIn([from, ...collectionPath]);
+    const yamlPaths: CollectionPath[] = [];
+    if (promote.has('yamlPaths')) {
+      const yamlPathsSeq = promote.get('yamlPaths');
+      if (!yaml.isSeq(yamlPathsSeq)) {
+        throw Error(
+          `The value at ${myName}.promote.yamlPaths must be an array`,
+        );
+      }
+      const explicitYamlPaths = yamlPathsSeq.toJSON();
+      if (!Array.isArray(explicitYamlPaths)) {
+        throw Error('YAMLSeq.toJSON surprisingly did not return an array');
+      }
+      if (!explicitYamlPaths.every(isCollectionPath)) {
+        throw Error(
+          `The value at ${myName}.promote.yamlPaths must be an array whose elements are arrays of strings or numbers`,
+        );
+      }
+      yamlPaths.push(...explicitYamlPaths);
+    } else {
+      // By default, promote gitConfig.ref and dockerImage.tag, but only the
+      // ones that are actually there.
+
+      for (const potentialCollectionPath of DEFAULT_YAML_PATHS) {
+        if (
+          fromBlock.getIn(potentialCollectionPath) &&
+          me.getIn(potentialCollectionPath)
+        ) {
+          yamlPaths.push(potentialCollectionPath);
+        }
+      }
+
+      if (yamlPaths.length === 0) {
+        throw Error(
+          `${myName}.promote does not specify 'yamlPaths' and none of the default promoted paths (${DEFAULT_YAML_PATHS.map(
+            (p) => p.join('.'),
+          ).join(', ')}) exist in both the source and the target.`,
+        );
+      }
+    }
+
+    for (const collectionPath of yamlPaths) {
+      const sourceValue = fromBlock.getIn(collectionPath);
       if (typeof sourceValue !== 'string') {
         throw Error(`Could not promote from ${[from, ...collectionPath]}`);
       }

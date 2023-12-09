@@ -1,7 +1,7 @@
 import * as core from '@actions/core';
 import * as yaml from 'yaml';
 import { GitHubClient } from './github';
-import { CSTScalarToken, ScalarTokenWriter } from './yaml';
+import { CSTScalarToken, ScalarTokenWriter, getTopLevelBlocks } from './yaml';
 
 interface Trackable {
   trackMutableRef: string;
@@ -40,10 +40,24 @@ export async function updateGitRefs(
       ...new yaml.Composer({ keepSourceTokens: true }).compose(topLevelTokens),
     ];
 
+    // These files are all Helm values.yaml files, and Helm doesn't support a
+    // multiple-document stream (with ---) for its value files. Or well, it
+    // ignores any documents after the first, so there's no point in allowing
+    // folks to put them in our codebase.
+    if (documents.length > 1) {
+      throw new Error('Multiple documents in YAML file');
+    }
+
+    // If the file is empty (or just whitespace or whatever), that's fine; we
+    // can just leave it alone.
+    if (documents.length < 1) {
+      return contents;
+    }
+
+    const document = documents[0];
+
     core.info('Looking for trackMutableRef');
-    const trackables = documents.flatMap((document) =>
-      findTrackables(document),
-    );
+    const trackables = findTrackables(document);
 
     core.info('Checking refs against GitHub');
     await checkRefsAgainstGitHubAndModifyScalars(trackables, gitHubClient);
@@ -54,34 +68,57 @@ export async function updateGitRefs(
   });
 }
 
-function findTrackables(doc: yaml.Document): Trackable[] {
+function findTrackables(doc: yaml.Document.Parsed): Trackable[] {
   const trackables: Trackable[] = [];
 
   // FIXME figure out error handling
 
-  yaml.visit(doc, {
-    Map(_, value) {
-      const trackMutableRef = getStringValue(value, 'trackMutableRef');
-      const repoURL = getStringValue(value, 'repoURL');
-      const path = getStringValue(value, 'path');
-      const refScalarTokenAndValue = getStringAndScalarTokenFromMap(
-        value,
-        'ref',
-      );
-      if (trackMutableRef && repoURL && path && refScalarTokenAndValue) {
-        trackables.push({
-          trackMutableRef,
-          repoURL,
-          path,
-          ref: refScalarTokenAndValue.value,
-          refScalarTokenWriter: new ScalarTokenWriter(
-            refScalarTokenAndValue.scalarToken,
-            doc.schema,
-          ),
-        });
-      }
-    },
-  });
+  const { blocks, globalBlock } = getTopLevelBlocks(doc);
+
+  let globalRepoURL: string | null = null;
+  let globalPath: string | null = null;
+
+  if (globalBlock?.has('gitConfig')) {
+    const gitConfigBlock = globalBlock.get('gitConfig');
+    if (!yaml.isMap(gitConfigBlock)) {
+      throw Error('Document has `global.gitConfig` that is not a map');
+    }
+    // Read repoURL and path from 'global' (keeping them null if they're not
+    // there, though throwing if they're there as non-strings).
+    globalRepoURL = getStringValue(gitConfigBlock, 'repoURL');
+    globalPath = getStringValue(gitConfigBlock, 'path');
+  }
+
+  for (const [key, value] of blocks) {
+    if (!value.has('gitConfig')) {
+      continue;
+    }
+    const gitConfigBlock = value.get('gitConfig');
+    if (!yaml.isMap(gitConfigBlock)) {
+      throw Error(`Document has \`${key}.gitConfig\` that is not a map`);
+    }
+
+    const repoURL = getStringValue(gitConfigBlock, 'repoURL') ?? globalRepoURL;
+    const path = getStringValue(gitConfigBlock, 'path') ?? globalPath;
+    const trackMutableRef = getStringValue(gitConfigBlock, 'trackMutableRef');
+    const refScalarTokenAndValue = getStringAndScalarTokenFromMap(
+      gitConfigBlock,
+      'ref',
+    );
+
+    if (trackMutableRef && repoURL && path && refScalarTokenAndValue) {
+      trackables.push({
+        trackMutableRef,
+        repoURL,
+        path,
+        ref: refScalarTokenAndValue.value,
+        refScalarTokenWriter: new ScalarTokenWriter(
+          refScalarTokenAndValue.scalarToken,
+          doc.schema,
+        ),
+      });
+    }
+  }
 
   return trackables;
 }

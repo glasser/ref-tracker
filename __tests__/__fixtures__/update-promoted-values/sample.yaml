@@ -1,5 +1,5 @@
 some-service-staging:
-  source:
+  gitConfig:
     repoURL: https://github.com/apollographql/some-repo.git
     path: services/hello-world
     trackMutableRef: main
@@ -8,8 +8,7 @@ some-service-staging:
 some-service-prod:
   promote:
     from: some-service-staging
-    values: [[source, ref]]
-  source:
+  gitConfig:
     repoURL: https://github.com/apollographql/some-repo.git
     path: services/hello-world
     ref:    overwrite-me      # please
@@ -17,8 +16,7 @@ some-service-prod:
 some-service-not-selected:
   promote:
     from: some-service-staging
-    values: [[source, ref]]
-  source:
+  gitConfig:
     repoURL: https://github.com/apollographql/some-repo.git
     path: services/hello-world
     ref:    overwrite-me      # this will not be updated because of the regexp
