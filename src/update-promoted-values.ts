@@ -12,6 +12,11 @@ interface Promote {
   value: string;
 }
 
+const DEFAULT_YAML_PATHS = [
+  ['gitConfig', 'ref'],
+  ['dockerImage', 'tag'],
+];
+
 export async function updatePromotedValues(
   contents: string,
   promotionTargetRegexp: string | null,
@@ -76,19 +81,44 @@ function findPromotes(
       );
     }
 
-    // FIXME use default yamlPaths
-    const yamlPathsSeq = promote.get('yamlPaths');
-    if (!yaml.isSeq(yamlPathsSeq)) {
-      throw Error(`The value at ${myName}.promote.yamlPaths must be an array`);
-    }
-    const yamlPaths = yamlPathsSeq.toJSON();
-    if (!Array.isArray(yamlPaths)) {
-      throw Error('YAMLSeq.toJSON surprisingly did not return an array');
-    }
-    if (!yamlPaths.every(isCollectionPath)) {
-      throw Error(
-        `The value at ${myName}.promote.yamlPaths must be an array whose elements are arrays of strings or numbers`,
-      );
+    const yamlPaths: CollectionPath[] = [];
+    if (promote.has('yamlPaths')) {
+      const yamlPathsSeq = promote.get('yamlPaths');
+      if (!yaml.isSeq(yamlPathsSeq)) {
+        throw Error(
+          `The value at ${myName}.promote.yamlPaths must be an array`,
+        );
+      }
+      const explicitYamlPaths = yamlPathsSeq.toJSON();
+      if (!Array.isArray(explicitYamlPaths)) {
+        throw Error('YAMLSeq.toJSON surprisingly did not return an array');
+      }
+      if (!explicitYamlPaths.every(isCollectionPath)) {
+        throw Error(
+          `The value at ${myName}.promote.yamlPaths must be an array whose elements are arrays of strings or numbers`,
+        );
+      }
+      yamlPaths.push(...explicitYamlPaths);
+    } else {
+      // By default, promote gitConfig.ref and dockerImage.tag, but only the
+      // ones that are actually there.
+
+      for (const potentialCollectionPath of DEFAULT_YAML_PATHS) {
+        if (
+          fromBlock.getIn(potentialCollectionPath) &&
+          me.getIn(potentialCollectionPath)
+        ) {
+          yamlPaths.push(potentialCollectionPath);
+        }
+      }
+
+      if (yamlPaths.length === 0) {
+        throw Error(
+          `${myName}.promote does not specify 'yamlPaths' and none of the default promoted paths (${DEFAULT_YAML_PATHS.map(
+            (p) => p.join('.'),
+          ).join(', ')}) exist in both the source and the target.`,
+        );
+      }
     }
 
     for (const collectionPath of yamlPaths) {

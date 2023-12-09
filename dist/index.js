@@ -37659,8 +37659,21 @@ async function updateGitRefs(contents, gitHubClient) {
         const documents = [
             ...new yaml.Composer({ keepSourceTokens: true }).compose(topLevelTokens),
         ];
+        // These files are all Helm values.yaml files, and Helm doesn't support a
+        // multiple-document stream (with ---) for its value files. Or well, it
+        // ignores any documents after the first, so there's no point in allowing
+        // folks to put them in our codebase.
+        if (documents.length > 1) {
+            throw new Error('Multiple documents in YAML file');
+        }
+        // If the file is empty (or just whitespace or whatever), that's fine; we
+        // can just leave it alone.
+        if (documents.length < 1) {
+            return contents;
+        }
+        const document = documents[0];
         core.info('Looking for trackMutableRef');
-        const trackables = documents.flatMap((document) => findTrackables(document));
+        const trackables = findTrackables(document);
         core.info('Checking refs against GitHub');
         await checkRefsAgainstGitHubAndModifyScalars(trackables, gitHubClient);
         core.info('Stringifying');
@@ -37673,23 +37686,41 @@ exports.updateGitRefs = updateGitRefs;
 function findTrackables(doc) {
     const trackables = [];
     // FIXME figure out error handling
-    yaml.visit(doc, {
-        Map(_, value) {
-            const trackMutableRef = getStringValue(value, 'trackMutableRef');
-            const repoURL = getStringValue(value, 'repoURL');
-            const path = getStringValue(value, 'path');
-            const refScalarTokenAndValue = getStringAndScalarTokenFromMap(value, 'ref');
-            if (trackMutableRef && repoURL && path && refScalarTokenAndValue) {
-                trackables.push({
-                    trackMutableRef,
-                    repoURL,
-                    path,
-                    ref: refScalarTokenAndValue.value,
-                    refScalarTokenWriter: new yaml_1.ScalarTokenWriter(refScalarTokenAndValue.scalarToken, doc.schema),
-                });
-            }
-        },
-    });
+    const { blocks, globalBlock } = (0, yaml_1.getTopLevelBlocks)(doc);
+    let globalRepoURL = null;
+    let globalPath = null;
+    if (globalBlock?.has('gitConfig')) {
+        const gitConfigBlock = globalBlock.get('gitConfig');
+        if (!yaml.isMap(gitConfigBlock)) {
+            throw Error('Document has `global.gitConfig` that is not a map');
+        }
+        // Read repoURL and path from 'global' (keeping them null if they're not
+        // there, though throwing if they're there as non-strings).
+        globalRepoURL = getStringValue(gitConfigBlock, 'repoURL');
+        globalPath = getStringValue(gitConfigBlock, 'path');
+    }
+    for (const [key, value] of blocks) {
+        if (!value.has('gitConfig')) {
+            continue;
+        }
+        const gitConfigBlock = value.get('gitConfig');
+        if (!yaml.isMap(gitConfigBlock)) {
+            throw Error(`Document has \`${key}.gitConfig\` that is not a map`);
+        }
+        const repoURL = getStringValue(gitConfigBlock, 'repoURL') ?? globalRepoURL;
+        const path = getStringValue(gitConfigBlock, 'path') ?? globalPath;
+        const trackMutableRef = getStringValue(gitConfigBlock, 'trackMutableRef');
+        const refScalarTokenAndValue = getStringAndScalarTokenFromMap(gitConfigBlock, 'ref');
+        if (trackMutableRef && repoURL && path && refScalarTokenAndValue) {
+            trackables.push({
+                trackMutableRef,
+                repoURL,
+                path,
+                ref: refScalarTokenAndValue.value,
+                refScalarTokenWriter: new yaml_1.ScalarTokenWriter(refScalarTokenAndValue.scalarToken, doc.schema),
+            });
+        }
+    }
     return trackables;
 }
 // Returns null if the value isn't there at all; throws if it's there but isn't
@@ -37806,6 +37837,10 @@ const core = __importStar(__nccwpck_require__(2186));
 const re2_wasm_1 = __nccwpck_require__(3293);
 const yaml = __importStar(__nccwpck_require__(4083));
 const yaml_1 = __nccwpck_require__(1826);
+const DEFAULT_YAML_PATHS = [
+    ['gitConfig', 'ref'],
+    ['dockerImage', 'tag'],
+];
 async function updatePromotedValues(contents, promotionTargetRegexp) {
     return core.group('Processing promote', async () => {
         // We use re2-wasm instead of built-in RegExp so we don't have to worry about
@@ -37835,23 +37870,10 @@ async function updatePromotedValues(contents, promotionTargetRegexp) {
 }
 exports.updatePromotedValues = updatePromotedValues;
 function findPromotes(document, promotionTargetRE2) {
-    const topLevelMap = document.contents;
-    if (!yaml.isMap(topLevelMap)) {
-        throw Error('Top level of YAML document needs to be a map for promote tracking to work');
-    }
+    const { blocks } = (0, yaml_1.getTopLevelBlocks)(document);
     const promotes = [];
-    for (const { key, value: me } of topLevelMap.items) {
-        if (!yaml.isScalar(key)) {
-            continue;
-        }
-        const myName = key.value;
-        if (typeof myName !== 'string') {
-            continue;
-        }
+    for (const [myName, me] of blocks) {
         if (promotionTargetRE2 && !promotionTargetRE2.test(myName)) {
-            continue;
-        }
-        if (!yaml.isMap(me)) {
             continue;
         }
         if (!me.has('promote')) {
@@ -37865,19 +37887,40 @@ function findPromotes(document, promotionTargetRE2) {
         if (typeof from !== 'string') {
             throw Error(`The value at ${myName}.promote.from must be a string`);
         }
-        const valuesYAMLSeq = promote.get('values');
-        if (!yaml.isSeq(valuesYAMLSeq)) {
-            throw Error(`The value at ${myName}.promote.values must be an array`);
+        const fromBlock = blocks.get(from);
+        if (!fromBlock) {
+            throw Error(`The value at ${myName}.promote.from must reference a top-level key with map value`);
         }
-        const values = valuesYAMLSeq.toJSON();
-        if (!Array.isArray(values)) {
-            throw Error('YAMLSeq.toJSON surprisingly did not return an array');
+        const yamlPaths = [];
+        if (promote.has('yamlPaths')) {
+            const yamlPathsSeq = promote.get('yamlPaths');
+            if (!yaml.isSeq(yamlPathsSeq)) {
+                throw Error(`The value at ${myName}.promote.yamlPaths must be an array`);
+            }
+            const explicitYamlPaths = yamlPathsSeq.toJSON();
+            if (!Array.isArray(explicitYamlPaths)) {
+                throw Error('YAMLSeq.toJSON surprisingly did not return an array');
+            }
+            if (!explicitYamlPaths.every(isCollectionPath)) {
+                throw Error(`The value at ${myName}.promote.yamlPaths must be an array whose elements are arrays of strings or numbers`);
+            }
+            yamlPaths.push(...explicitYamlPaths);
         }
-        if (!values.every(isCollectionPath)) {
-            throw Error(`The value at ${myName}.promote.values must be an array whose elements are arrays of strings or numbers`);
+        else {
+            // By default, promote gitConfig.ref and dockerImage.tag, but only the
+            // ones that are actually there.
+            for (const potentialCollectionPath of DEFAULT_YAML_PATHS) {
+                if (fromBlock.getIn(potentialCollectionPath) &&
+                    me.getIn(potentialCollectionPath)) {
+                    yamlPaths.push(potentialCollectionPath);
+                }
+            }
+            if (yamlPaths.length === 0) {
+                throw Error(`${myName}.promote does not specify 'yamlPaths' and none of the default promoted paths (${DEFAULT_YAML_PATHS.map((p) => p.join('.')).join(', ')}) exist in both the source and the target.`);
+            }
         }
-        for (const collectionPath of values) {
-            const sourceValue = topLevelMap.getIn([from, ...collectionPath]);
+        for (const collectionPath of yamlPaths) {
+            const sourceValue = fromBlock.getIn(collectionPath);
             if (typeof sourceValue !== 'string') {
                 throw Error(`Could not promote from ${[from, ...collectionPath]}`);
             }
@@ -37938,7 +37981,7 @@ var __importStar = (this && this.__importStar) || function (mod) {
     return result;
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.ScalarTokenWriter = void 0;
+exports.getTopLevelBlocks = exports.ScalarTokenWriter = void 0;
 const yaml = __importStar(__nccwpck_require__(4083));
 class ScalarTokenWriter {
     scalarToken;
@@ -37969,6 +38012,41 @@ class ScalarTokenWriter {
     }
 }
 exports.ScalarTokenWriter = ScalarTokenWriter;
+function getTopLevelBlocks(doc) {
+    let globalBlock = null;
+    const blocks = new Map();
+    const topLevel = doc.contents;
+    if (!yaml.isMap(topLevel)) {
+        throw Error('Expected the top level of the document to be a map');
+    }
+    if (topLevel.has('global')) {
+        const gb = topLevel.get('global');
+        if (!yaml.isMap(gb)) {
+            throw Error('Document has a top-level `global` key whose value is not a map');
+        }
+        globalBlock = gb;
+    }
+    for (const { key, value } of topLevel.items) {
+        if (!yaml.isScalar(key)) {
+            continue;
+        }
+        if (typeof key.value !== 'string') {
+            continue;
+        }
+        // The `global` block was already handled specially above.
+        if (key.value === 'global') {
+            if (!yaml.isMap(value)) {
+                throw Error('Document has a top-level `global` key whose value is not a map');
+            }
+            globalBlock = value;
+        }
+        else if (yaml.isMap(value)) {
+            blocks.set(key.value, value);
+        }
+    }
+    return { globalBlock, blocks };
+}
+exports.getTopLevelBlocks = getTopLevelBlocks;
 
 
 /***/ }),

@@ -8,7 +8,6 @@ some-service-staging:
 some-service-prod:
   promote:
     from: some-service-staging
-    yamlPaths: [[gitConfig, ref]]
   gitConfig:
     repoURL: https://github.com/apollographql/some-repo.git
     path: services/hello-world
@@ -17,7 +16,6 @@ some-service-prod:
 some-service-not-selected:
   promote:
     from: some-service-staging
-    yamlPaths: [[gitConfig, ref]]
   gitConfig:
     repoURL: https://github.com/apollographql/some-repo.git
     path: services/hello-world
