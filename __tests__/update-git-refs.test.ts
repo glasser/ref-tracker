@@ -28,8 +28,8 @@ const mockGitHubClient: GitHubClient = {
   },
 };
 
-function fixture(filename: string): Promise<string> {
-  return readFile(
+async function fixture(filename: string): Promise<string> {
+  return await readFile(
     join(__dirname, '__fixtures__', 'update-git-refs', filename),
     'utf-8',
   );
@@ -60,7 +60,7 @@ describe('action', () => {
 
   it('only changes ref when tree sha changes', async () => {
     let treeSHAForNew = 'aaaa';
-    const mockGitHubClient: GitHubClient = {
+    const mockGithubClientTreeSHA: GitHubClient = {
       async resolveRefToSha() {
         return 'new';
       },
@@ -72,10 +72,14 @@ describe('action', () => {
     const contents = await fixture('tree-sha.yaml');
 
     // First snapshot: ref should still be 'old' because tree SHA matches.
-    expect(await updateGitRefs(contents, mockGitHubClient)).toMatchSnapshot();
+    expect(
+      await updateGitRefs(contents, mockGithubClientTreeSHA),
+    ).toMatchSnapshot();
 
     treeSHAForNew = 'bbbb';
     // Second snapshot: ref should now be 'new' because tree SHA has changed.
-    expect(await updateGitRefs(contents, mockGitHubClient)).toMatchSnapshot();
+    expect(
+      await updateGitRefs(contents, mockGithubClientTreeSHA),
+    ).toMatchSnapshot();
   });
 });

@@ -40,7 +40,7 @@ export function getTopLevelBlocks(doc: yaml.Document.Parsed): {
   blocks: Map<string, yaml.YAMLMap.Parsed>;
 } {
   let globalBlock: yaml.YAMLMap.Parsed | null = null;
-  let blocks = new Map<string, yaml.YAMLMap.Parsed>();
+  const blocks = new Map<string, yaml.YAMLMap.Parsed>();
 
   const topLevel = doc.contents;
 
