@@ -15,6 +15,9 @@ inputs:
     description: 'Process trackMutableRef instructions'
     default: 'false'
   
+  update-docker-tags-for-artifact-registry-repository:
+    description: 'Process trackMutableTag instructions; must be set to a string of the form `projects/PROJECT/locations/LOCATION/repositories/REPOSITORY`'
+  
   update-promoted-values:
     description: 'Process promote instructions'
     default: 'false'

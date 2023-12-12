@@ -2,7 +2,9 @@ import * as core from '@actions/core';
 import * as github from '@actions/github';
 import * as glob from '@actions/glob';
 import { readFile, writeFile } from 'fs/promises';
+import { ArtifactRegistryDockerRegistryClient } from './artifactRegistry';
 import { OctokitGitHubClient } from './github';
+import { updateDockerTags } from './update-docker-tags';
 import { updateGitRefs } from './update-git-refs';
 import { updatePromotedValues } from './update-promoted-values';
 
@@ -36,6 +38,17 @@ async function processFile(filename: string): Promise<void> {
       // FIXME consider adding @octokit/plugin-throttling
       const gitHubClient = new OctokitGitHubClient(octokit);
       contents = await updateGitRefs(contents, gitHubClient);
+    }
+
+    const artifactRegistryRepository = core.getInput(
+      'update-docker-tags-for-artifact-registry-repository',
+    );
+
+    if (artifactRegistryRepository) {
+      const dockerRegistryClient = new ArtifactRegistryDockerRegistryClient(
+        artifactRegistryRepository,
+      );
+      contents = await updateDockerTags(contents, dockerRegistryClient);
     }
 
     if (core.getBooleanInput('update-promoted-values')) {
