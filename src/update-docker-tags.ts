@@ -1,5 +1,5 @@
 import * as core from '@actions/core';
-import max from 'lodash/max';
+import min from 'lodash/min';
 import * as yaml from 'yaml';
 import { DockerRegistryClient } from './artifactRegistry';
 import {
@@ -114,18 +114,55 @@ async function checkTagsAgainstArtifactRegistryAndModifyScalars(
   dockerRegistryClient: DockerRegistryClient,
 ): Promise<void> {
   for (const trackable of trackables) {
-    // FIXME error handling
-    const equivalentTags = await dockerRegistryClient.getAllEquivalentTags({
-      dockerImageRepository: trackable.dockerImageRepository,
-      tag: trackable.trackMutableTag,
-    });
-
     const prefix = `${trackable.trackMutableTag}---`;
 
-    const latestMatchingTag = max(
+    // FIXME error handling
+    const equivalentTags = (
+      await dockerRegistryClient.getAllEquivalentTags({
+        dockerImageRepository: trackable.dockerImageRepository,
+        tag: trackable.trackMutableTag,
+      })
+    ).filter((t) => t.startsWith(prefix));
+
+    // We assume that all the tags with the triple-dash in them are immutable:
+    // once they point at a particular SHA, they never change. (Whereas the tag
+    // we're "tracking" is mutable.)
+    //
+    // If the current tag has the right format for an immutable tag and it
+    // points to the same image as the mutable tag, leave it alone: there's no
+    // reason to create a no-op diff.
+    if (equivalentTags.includes(trackable.tag)) {
+      core.info(
+        `for image ${trackable.dockerImageRepository}:${trackable.trackMutableTag}, preserving current tag ${trackable.tag}`,
+      );
+      continue;
+    }
+    // We can choose *any* of these equivalent triple-dashed tags, and it will
+    // select the correct image version.
+    //
+    // Our tag structure increase over time (by including the number of commits
+    // since the start as determined by `git rev-list --first-parent --count
+    // HEAD`), and also includes the git commit at which it was built.
+    //
+    // So by choosing the lexicographically earliest of the equivalent tags, we
+    // are most likely to choose a tag where the named git commit actually is
+    // the commit that made a relevant change that affected the image.
+    //
+    // Additionally, this means that reverting a code change is likely to result
+    // in a revert of the tag.  Imagine that tag `main---00123-abcd` is
+    // currently running in both staging and prod, and a code change moves
+    // `main` to `main---00130-bcde` and this is deployed to staging (opening a
+    // prod promotion PR). A bug is found, so the code change X is reverted.
+    // Reproducible builds will mean that the newest tag `main---00134-dcba`
+    // will hopefully point to the same image version as `main---00123-abcd`.
+    // Choosing the min version here will mean that we will in fact "revert"
+    // staging to `main---00123-abcd`. This is now the exact same tag that is
+    // running in prod, so the prod promotion PR can auto-close rather than
+    // encouraging us to consider a no-op deploy to prod.
+    const earliestMatchingTag = min(
       equivalentTags.filter((t) => t.startsWith(prefix)),
     );
-    if (!latestMatchingTag) {
+    if (!earliestMatchingTag) {
       throw new Error(
         `No tags on ${trackable.dockerImageRepository} start with '${prefix}'`,
       );
@@ -134,13 +171,13 @@ async function checkTagsAgainstArtifactRegistryAndModifyScalars(
     // It's OK if the current one is null because that's what we're overwriting, but we shouldn't
     // overwrite *to* something that doesn't exist.
     core.info(
-      `for image ${trackable.dockerImageRepository}:${trackable.trackMutableTag}, selecting latest label ${latestMatchingTag}`,
+      `for image ${trackable.dockerImageRepository}:${trackable.trackMutableTag}, selecting earliest label ${earliestMatchingTag}`,
     );
-    if (trackable.tag === latestMatchingTag) {
+    if (trackable.tag === earliestMatchingTag) {
       core.info('(unchanged)');
     } else {
       core.info('(changed!)');
-      trackable.tagScalarTokenWriter.write(latestMatchingTag);
+      trackable.tagScalarTokenWriter.write(earliestMatchingTag);
     }
   }
 }
