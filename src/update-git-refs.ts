@@ -1,7 +1,12 @@
 import * as core from '@actions/core';
 import * as yaml from 'yaml';
 import { GitHubClient } from './github';
-import { CSTScalarToken, ScalarTokenWriter, getTopLevelBlocks } from './yaml';
+import {
+  ScalarTokenWriter,
+  getStringAndScalarTokenFromMap,
+  getStringValue,
+  getTopLevelBlocks,
+} from './yaml';
 
 interface Trackable {
   trackMutableRef: string;
@@ -121,36 +126,6 @@ function findTrackables(doc: yaml.Document.Parsed): Trackable[] {
   }
 
   return trackables;
-}
-
-// Returns null if the value isn't there at all; throws if it's there but isn't
-// a string.
-function getStringValue(node: yaml.YAMLMap, key: string): string | null {
-  return getStringAndScalarTokenFromMap(node, key)?.value ?? null;
-}
-
-// Returns null if the value isn't there at all; throws if it's there but isn't
-// a string.
-function getStringAndScalarTokenFromMap(
-  node: yaml.YAMLMap,
-  key: string,
-): { scalarToken: CSTScalarToken; value: string } | null {
-  if (!node.has(key)) {
-    return null;
-  }
-  const scalar = node.get(key, true);
-  if (!yaml.isScalar(scalar)) {
-    throw Error(`${key} value must be a scalar`);
-  }
-  const scalarToken = scalar?.srcToken;
-  if (!yaml.CST.isScalar(scalarToken)) {
-    // this probably can't happen, but let's make the types happy
-    throw Error(`${key} value must come from a scalar token`);
-  }
-  if (typeof scalar.value !== 'string') {
-    throw Error(`${key} value must be a string`);
-  }
-  return { scalarToken, value: scalar.value };
 }
 
 async function checkRefsAgainstGitHubAndModifyScalars(
