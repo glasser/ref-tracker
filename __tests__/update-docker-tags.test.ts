@@ -3,11 +3,6 @@ import { join } from 'path';
 import { GetAllEquivalentTagsOptions } from '../src/artifactRegistry';
 import { updateDockerTags } from '../src/update-docker-tags';
 
-// FIXME figure out logging (eg pass in a fake implementation of core
-// to code, or mock it, or capture process.stdout, etc)
-// Mock the GitHub Actions core library
-// let infoMock: jest.SpyInstance;
-
 async function fixture(filename: string): Promise<string> {
   return await readFile(
     join(__dirname, '__fixtures__', 'update-docker-tags', filename),

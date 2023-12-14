@@ -1,5 +1,5 @@
-name: 'Ref Tracker'
-description: 'Looks up mutable refs in config files and writes out immutable versions'
+name: 'ArgoCD Config Updater'
+description: 'Updates ArgoCD config files by updating mutable git refs and Docker tag, and promoting values between environments'
 author: 'Apollo GraphQL'
 
 # Define your inputs here.

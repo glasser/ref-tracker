@@ -56,8 +56,6 @@ export async function updateDockerTags(
 function findTrackables(doc: yaml.Document.Parsed): Trackable[] {
   const trackables: Trackable[] = [];
 
-  // FIXME figure out error handling
-
   const { blocks, globalBlock } = getTopLevelBlocks(doc);
 
   let globalDockerImageRepository: string | null = null;
@@ -116,7 +114,6 @@ async function checkTagsAgainstArtifactRegistryAndModifyScalars(
   for (const trackable of trackables) {
     const prefix = `${trackable.trackMutableTag}---`;
 
-    // FIXME error handling
     const equivalentTags = (
       await dockerRegistryClient.getAllEquivalentTags({
         dockerImageRepository: trackable.dockerImageRepository,

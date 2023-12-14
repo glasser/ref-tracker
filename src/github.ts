@@ -63,7 +63,6 @@ export class OctokitGitHubClient {
   }: GetTreeSHAForPathOptions): Promise<string | null> {
     const { owner, repo } = parseRepoURL(repoURL);
     let data;
-    // FIXME error handling
     try {
       data = (
         await this.octokit.rest.repos.getContent({
@@ -94,7 +93,6 @@ export class OctokitGitHubClient {
         typeof data.sha === 'string'
       )
     ) {
-      // FIXME better error handling.
       throw Error('response does not appear to be a tree');
     }
     return data.sha;

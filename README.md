@@ -1,225 +1,159 @@
-(Temporary home for this package. Will be moved out of personal repo if we go
-forward with this prototype.)
+# ArgoCD Config Updater
 
-# Create a GitHub Action Using TypeScript
+This action can be used inside a GitHub workflow to update YAML config files
+based on external events. Specifically, these are config files for Apollo's
+particular use of ArgoCD. We use an `apollo-application` Helm chart to define
+the ArgoCD Applications in our environment. This action knows how to make
+several kinds of updates to the application configuration.
 
-[![CI](https://github.com/glasser/ref-tracker/actions/workflows/ci.yml/badge.svg)](https://github.com/glasser/ref-tracker/actions/workflows/ci.yml)
-[![Check dist/](https://github.com/glasser/ref-tracker/actions/workflows/check-dist.yml/badge.svg)](https://github.com/glasser/ref-tracker/actions/workflows/check-dist.yml)
-[![Coverage](./badges/coverage.svg)](./badges/coverage.svg)
-
-Use this template to bootstrap the creation of a TypeScript action. :rocket:
-
-This template includes compilation support, tests, a validation workflow,
-publishing, and versioning guidance.
-
-If you are new, there's also a simpler introduction in the
-[Hello world JavaScript action repository](https://github.com/actions/hello-world-javascript-action).
-
-## Create Your Own Action
-
-To create your own action, you can use this repository as a template! Just
-follow the below instructions:
-
-1. Click the **Use this template** button at the top of the repository
-1. Select **Create a new repository**
-1. Select an owner and name for your new repository
-1. Click **Create repository**
-1. Clone your new repository
-
-## Initial Setup
-
-After you've cloned the repository to your local machine or codespace, you'll
-need to perform some initial setup steps before you can develop your action.
-
-> [!NOTE]
->
-> You'll need to have a reasonably modern version of
-> [Node.js](https://nodejs.org) handy (20.x or later should work!). If you are
-> using a version manager like [`nodenv`](https://github.com/nodenv/nodenv) or
-> [`nvm`](https://github.com/nvm-sh/nvm), this template has a `.node-version`
-> file at the root of the repository that will be used to automatically switch
-> to the correct version when you `cd` into the repository. Additionally, this
-> `.node-version` file is used by GitHub Actions in any `actions/setup-node`
-> actions.
-
-1. :hammer_and_wrench: Install the dependencies
-
-   ```bash
-   npm install
-   ```
-
-1. :building_construction: Package the TypeScript for distribution
-
-   ```bash
-   npm run bundle
-   ```
-
-1. :white_check_mark: Run the tests
-
-   ```bash
-   $ npm test
-
-   PASS  ./index.test.js
-     ✓ throws invalid number (3ms)
-     ✓ wait 500 ms (504ms)
-     ✓ test runs (95ms)
-
-   ...
-   ```
-
-## Update the Action Metadata
-
-The [`action.yml`](action.yml) file defines metadata about your action, such as
-input(s) and output(s). For details about this file, see
-[Metadata syntax for GitHub Actions](https://docs.github.com/en/actions/creating-actions/metadata-syntax-for-github-actions).
-
-When you copy this repository, update `action.yml` with the name, description,
-inputs, and outputs for your action.
-
-## Update the Action Code
-
-The [`src/`](./src/) directory is the heart of your action! This contains the
-source code that will be run when your action is invoked. You can replace the
-contents of this directory with your own code.
-
-There are a few things to keep in mind when writing your action code:
-
-- Most GitHub Actions toolkit and CI/CD operations are processed asynchronously.
-  In `main.ts`, you will see that the action is run in an `async` function.
-
-  ```javascript
-  import * as core from '@actions/core';
-  //...
-
-  async function run() {
-    try {
-      //...
-    } catch (error) {
-      core.setFailed(error.message);
-    }
-  }
-  ```
-
-  For more information about the GitHub Actions toolkit, see the
-  [documentation](https://github.com/actions/toolkit/blob/master/README.md).
-
-So, what are you waiting for? Go ahead and start customizing your action!
-
-1. Create a new branch
-
-   ```bash
-   git checkout -b releases/v1
-   ```
-
-1. Replace the contents of `src/` with your action code
-1. Add tests to `__tests__/` for your source code
-1. Format, test, and build the action
-
-   ```bash
-   npm run all
-   ```
-
-   > [!WARNING]
-   >
-   > This step is important! It will run [`ncc`](https://github.com/vercel/ncc)
-   > to build the final JavaScript action code with all dependencies included.
-   > If you do not run this step, your action will not work correctly when it is
-   > used in a workflow. This step also includes the `--license` option for
-   > `ncc`, which will create a license file for all of the production node
-   > modules used in your project.
-
-1. Commit your changes
-
-   ```bash
-   git add .
-   git commit -m "My first action is ready!"
-   ```
-
-1. Push them to your repository
-
-   ```bash
-   git push -u origin releases/v1
-   ```
-
-1. Create a pull request and get feedback on your action
-1. Merge the pull request into the `main` branch
-
-Your action is now published! :rocket:
-
-For information about versioning your action, see
-[Versioning](https://github.com/actions/toolkit/blob/master/docs/action-versioning.md)
-in the GitHub Actions toolkit.
-
-## Validate the Action
-
-You can now validate the action by referencing it in a workflow file. For
-example, [`ci.yml`](./.github/workflows/ci.yml) demonstrates how to reference an
-action in the same repository.
+Specifically, if our repository has a chart with this Chart.yaml:
 
 ```yaml
-steps:
-  - name: Checkout
-    id: checkout
-    uses: actions/checkout@v4
+apiVersion: v2
+name: some-app
+description: some-app installations
+type: application
+version: 0.1.0
 
-  - name: Test Local Action
-    id: test-action
-    uses: ./
-    with:
-      milliseconds: 1000
-
-  - name: Print Output
-    id: output
-    run: echo "${{ steps.test-action.outputs.time }}"
+dependencies:
+  - name: apollo-application
+    version: '>= 0.1.0'
+    repository: https://some.repository.example/apollo-application
+    alias: dev
+  - name: apollo-application
+    version: '>= 0.1.0'
+    repository: https://some.repository.example/apollo-application
+    alias: staging
+  - name: apollo-application
+    version: '>= 0.1.0'
+    repository: https://some.repository.example/apollo-application
+    alias: prod
 ```
 
-For example workflow runs, check out the
-[Actions tab](https://github.com/actions/typescript-action/actions)! :rocket:
-
-## Usage
-
-After testing, you can create version tag(s) that developers can use to
-reference different stable versions of your action. For more information, see
-[Versioning](https://github.com/actions/toolkit/blob/master/docs/action-versioning.md)
-in the GitHub Actions toolkit.
-
-To include the action in a workflow in another repository, you can use the
-`uses` syntax with the `@` symbol to reference a specific branch, tag, or commit
-hash.
+and this values.yaml:
 
 ```yaml
-steps:
-  - name: Checkout
-    id: checkout
-    uses: actions/checkout@v4
+global:
+  gitConfig:
+    repoURL: https://github.com/some-org/some-repository-of-charts.git
+    path: charts/some-app
+  dockerImage:
+    repository: some-app
 
-  - name: Test Local Action
-    id: test-action
-    uses: actions/typescript-action@v1 # Commit with the `v1` tag
-    with:
-      milliseconds: 1000
+dev:
+  gitConfig:
+    trackMutableRef: main
+    ref: c8e6a2a5ee0fa3950d190c835f4190f19e321f92
+  dockerImage:
+    trackMutableTag: main
+    tag: main---0000123-abcd0123
 
-  - name: Print Output
-    id: output
-    run: echo "${{ steps.test-action.outputs.time }}"
+staging:
+  promote:
+    from: dev
+  gitConfig:
+    ref: c8e6a2a5ee0fa3950d190c835f4190f19e321f92
+  dockerImage:
+    tag: main---0000100-cbcd0123
+
+prod:
+  promote:
+    from: staging
+  gitConfig:
+    ref: c8e6a2a5ee0fa3950d190c835f4190f19e321f92
+  dockerImage:
+    tag: main---0000100-cbcd0123
 ```
 
-## Publishing a new release
+`apollo-application` is a chart that uses the `gitConfig` and `dockerImage`
+configuration to generate an ArgoCD Application resource.
 
-This project includes a helper script designed to streamline the process of
-tagging and pushing new releases for GitHub Actions.
+Running this action can do three different things, depending on which inputs are
+provided. You must provide the `files` input, which is a glob pattern for which
+files to update.
 
-GitHub Actions allows users to select a specific version of the action to use,
-based on release tags. Our script simplifies this process by performing the
-following steps:
+## Updating git refs
 
-1. **Retrieving the latest release tag:** The script starts by fetching the most
-   recent release tag by looking at the local data available in your repository.
-1. **Prompting for a new release tag:** The user is then prompted to enter a new
-   release tag. To assist with this, the script displays the latest release tag
-   and provides a regular expression to validate the format of the new tag.
-1. **Tagging the new release:** Once a valid new tag is entered, the script tags
-   the new release.
-1. **Pushing the new tag to the remote:** Finally, the script pushes the new tag
-   to the remote repository. From here, you will need to create a new release in
-   GitHub and users can easily reference the new tag in their workflows.
+For each top-level section with a `gitConfig` block, if the `gitConfig` block
+contains the keys `repoURL`, `path`, `trackMutableRef` and `ref`, then this
+action can update the value at `ref` to be equal to the current git SHA for the
+ref named by `trackMutableRef` in the repository named by `repoURL`. (The
+`repoURL` and `path` keys may also be found in a `gitConfig` block under the
+top-level `global` block.)
+
+If the value at `ref` is already a git commit SHA, and the subtree named by
+`path` is identical at the commit it names and the commit named by
+`trackMutableRef` (based on comparing tree SHAs), it will not change the value.
+This means that changes to other parts of the repository will not result in
+"no-op" changes to this line.
+
+The effect of using `trackMutableRef` is similar to just specifying the mutable
+ref directly as the ref which the ArgoCD application tracks. But by explicitly
+changing the config file for each update, you can clearly see the difference
+between different environments, including environments that are not updated
+automatically in this way. Then, `promote` blocks (see below) can copy the git
+SHA to another application which does not use `trackMutableRef`.
+
+This functionality uses the GitHub API, which requires a GitHub API token to be
+passed via the `github-token` input. This token needs to have read access to
+code and metadata in all repositories that are referenced by `repoURL`.
+
+## Updating Docker tags
+
+For each top-level section with a `dockerImage` block, if the `dockerImage`
+block contains the keys `repository`, `trackMutableTag` and `tag`, then this
+action can update the value at `tag` to be equal to an "immutable" tag which
+points at the same image version as the tag named in `trackMutableTag` for the
+image named by `repository`. (The `repository` key may also be found in a
+`dockerImage` block under the top-level `global` block.)
+
+Specifically, this automation treats as immutable any tag starting with the
+value of `trackMutableTag` followed by `---`. The assumption is that a build
+process creates these immutable tags and also updates the shorter mutable tag.
+
+This specifically works with Docker images hosted at Google Artifact Registry.
+All docker images must be in the same AR registry, named by the
+`update-docker-tags-for-artifact-registry-repository` input, which has the form
+`projects/PROJECT/locations/LOCATION/repositories/REPOSITORY`.
+
+(Naming is a bit confusing here, because Docker uses the word "repository" to
+mean "a bunch of similar images that have different versions and tags", and
+Artifact Registry uses the word "repository" to mean "a collection of Docker
+repositories and other kinds of packages". The repository named in the action
+input is an AR repository; the repository named in the `dockerImage` section is
+a Docker repository (ie, image name).)
+
+If the value at `tag` already points at the same image version as the value at
+`trackMutableTag` (and it starts with the `trackMutableTag` value and `---`)
+then it is left alone. Otherwise, it is set to the tag pointing at the same
+version as `trackMutableTag` of the `TAG---*` format which comes
+lexicographically first.
+
+Like with `trackMutableRef`, this is helpful for making something which can be
+"promoted", but in addition, pointing Kubernetes containers at mutable Docker
+tags isn't very helpful because deployments will not restart just because the
+tag points at a new image. This mechanism means that changes to the mutable tag
+will actually lead to rollouts.
+
+This functionality uses the Google Cloud Platform API, which requires read
+access to the Artifact Registry repository in question (specifically, the
+`artifactregistry.tags.get` and `artifactregistry.versions.get` permissions).
+You should run the `google-github-actions/auth` action before this one.
+
+## Promoting values between apps
+
+Top-level sections can have a `promote` block with a `from` key naming a
+different top-level section. If the action is run with `update-promoted-values`
+set (and, if provided, `promotion-target-regexp` matches the section's name),
+then the automation will copy values from the other block to the target block.
+By default, the copied values are `gitConfig.ref` and `dockerImage.tag`; you can
+specify a different set of paths via `promote.yamlPaths`. This is applied after
+updating mutable refs and tags.
+
+# Caveat
+
+This package is designed specifically to meet the needs of Apollo's ArgoCD
+installation. We are making it publicly available under the MIT license to serve
+as an example/starting point for other organizations with similar needs, but we
+do not intend to generalize it in ways that are not relevant to our
+installation, or to provide any support.

@@ -76,8 +76,6 @@ export async function updateGitRefs(
 function findTrackables(doc: yaml.Document.Parsed): Trackable[] {
   const trackables: Trackable[] = [];
 
-  // FIXME figure out error handling
-
   const { blocks, globalBlock } = getTopLevelBlocks(doc);
 
   let globalRepoURL: string | null = null;
@@ -133,7 +131,6 @@ async function checkRefsAgainstGitHubAndModifyScalars(
   gitHubClient: GitHubClient,
 ): Promise<void> {
   for (const trackable of trackables) {
-    // FIXME error handling
     const mutableRefCurrentSHA = await gitHubClient.resolveRefToSha({
       repoURL: trackable.repoURL,
       ref: trackable.trackMutableRef,
