@@ -3,10 +3,6 @@ import { RE2 } from 're2-wasm';
 import * as yaml from 'yaml';
 import { ScalarTokenWriter, getTopLevelBlocks } from './yaml';
 
-// FIXME we will want to make a way to filter promote-ables so that we can
-// separate "promote to staging" from "promote to dev" for pipelines that have
-// multiple
-
 interface Promote {
   scalarTokenWriter: ScalarTokenWriter;
   value: string;
