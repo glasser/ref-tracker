@@ -159,9 +159,7 @@ async function checkTagsAgainstArtifactRegistryAndModifyScalars(
     // staging to `main---00123-abcd`. This is now the exact same tag that is
     // running in prod, so the prod promotion PR can auto-close rather than
     // encouraging us to consider a no-op deploy to prod.
-    const earliestMatchingTag = min(
-      equivalentTags.filter((t) => t.startsWith(prefix)),
-    );
+    const earliestMatchingTag = min(equivalentTags);
     if (!earliestMatchingTag) {
       throw new Error(
         `No tags on ${trackable.dockerImageRepository} start with '${prefix}'`,
@@ -171,13 +169,8 @@ async function checkTagsAgainstArtifactRegistryAndModifyScalars(
     // It's OK if the current one is null because that's what we're overwriting, but we shouldn't
     // overwrite *to* something that doesn't exist.
     core.info(
-      `for image ${trackable.dockerImageRepository}:${trackable.trackMutableTag}, selecting earliest label ${earliestMatchingTag}`,
+      `for image ${trackable.dockerImageRepository}:${trackable.trackMutableTag}, changing to minimal matching tag ${earliestMatchingTag}`,
     );
-    if (trackable.tag === earliestMatchingTag) {
-      core.info('(unchanged)');
-    } else {
-      core.info('(changed!)');
-      trackable.tagScalarTokenWriter.write(earliestMatchingTag);
-    }
+    trackable.tagScalarTokenWriter.write(earliestMatchingTag);
   }
 }
